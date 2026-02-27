@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:5001/api', // Use env var later
+  baseURL: 'http://ec2-3-25-120-212.ap-southeast-2.compute.amazonaws.com/api', // Use env var later
   headers: {
     'Content-Type': 'application/json',
   },
