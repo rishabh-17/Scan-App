@@ -9,7 +9,7 @@ const getPayroll = async (req, res) => {
     const payroll = await ScanEntry.aggregate([
       {
         $match: {
-          status: { $in: ['finance_approved', 'locked'] }, // Only approved entries
+          status: { $in: ['project_approved', 'finance_approved', 'locked'] }, // Include pending finance approval
         },
       },
       {
@@ -42,6 +42,10 @@ const getPayroll = async (req, res) => {
             projectId: '$projectId',
             projectName: '$project.name',
             rate: '$project.scanRate',
+            bankDetails: '$operator.bankDetails',
+            panNumber: '$operator.panNumber',
+            mobile: '$operator.mobile',
+            center: '$operator.center',
           },
           totalScans: { $sum: '$scans' },
         },
@@ -54,6 +58,10 @@ const getPayroll = async (req, res) => {
           projectId: '$_id.projectId',
           projectName: '$_id.projectName',
           rate: '$_id.rate',
+          bankDetails: '$_id.bankDetails',
+          panNumber: '$_id.panNumber',
+          mobile: '$_id.mobile',
+          center: '$_id.center',
           totalScans: 1,
           totalAmount: { $multiply: ['$totalScans', '$_id.rate'] },
         },

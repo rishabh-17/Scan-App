@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../services/api';
+import * as XLSX from 'xlsx';
 
 const Payroll = () => {
   const [activeTab, setActiveTab] = useState('payouts');
@@ -46,6 +47,27 @@ const Payroll = () => {
     fileInputRef.current.click();
   };
 
+  const handleExport = () => {
+    const exportData = payrollData.map(item => ({
+      'Operator Name': item.operatorName,
+      'Project': item.projectName,
+      'Total Scans': item.totalScans,
+      'Rate': item.rate,
+      'Total Amount': item.totalAmount,
+      'Mobile': item.mobile || 'N/A',
+      'Center': item.center || 'N/A',
+      'Bank Account': item.bankDetails?.accountNo || 'N/A',
+      'IFSC Code': item.bankDetails?.ifscCode || 'N/A',
+      'PAN Number': item.panNumber || 'N/A',
+      'Status': 'Pending/Approved', // Placeholder as aggregation groups multiple statuses
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Payroll");
+    XLSX.writeFile(wb, "payroll_export.xlsx");
+  };
+
   const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -60,14 +82,14 @@ const Payroll = () => {
           'Content-Type': 'multipart/form-data',
         },
       });
-      
+
       const { success, failed, errors } = response.data.results;
       let message = `Import Completed:\nSuccess: ${success}\nFailed: ${failed}`;
       if (errors.length > 0) {
         message += `\n\nErrors:\n${errors.slice(0, 5).join('\n')}${errors.length > 5 ? '\n...' : ''}`;
       }
       alert(message);
-      
+
       fetchPaymentHistory();
     } catch (error) {
       console.error('Import error:', error);
@@ -88,7 +110,7 @@ const Payroll = () => {
             Review operator payouts and manage payment history
           </p>
         </div>
-        
+
         <div className="flex gap-3">
           <input
             type="file"
@@ -97,6 +119,12 @@ const Payroll = () => {
             accept=".xlsx, .xls"
             className="hidden"
           />
+          <button
+            onClick={handleExport}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50"
+          >
+            Export to Excel
+          </button>
           <button
             onClick={handleImportClick}
             disabled={importing}
@@ -112,21 +140,19 @@ const Payroll = () => {
         <nav className="-mb-px flex space-x-8">
           <button
             onClick={() => setActiveTab('payouts')}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${
-              activeTab === 'payouts'
-                ? 'border-indigo-500 text-indigo-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'payouts'
+              ? 'border-indigo-500 text-indigo-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
           >
             Pending Payouts
           </button>
           <button
             onClick={() => setActiveTab('history')}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${
-              activeTab === 'history'
-                ? 'border-indigo-500 text-indigo-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'history'
+              ? 'border-indigo-500 text-indigo-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
           >
             Payment History
           </button>
@@ -244,11 +270,10 @@ const Payroll = () => {
                           )}
                         </td>
                         <td className="px-6 py-4">
-                          <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${
-                            payment.status === 'processed' ? 'bg-green-50 text-green-700' :
+                          <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${payment.status === 'processed' ? 'bg-green-50 text-green-700' :
                             payment.status === 'failed' ? 'bg-red-50 text-red-700' :
-                            'bg-yellow-50 text-yellow-700'
-                          }`}>
+                              'bg-yellow-50 text-yellow-700'
+                            }`}>
                             {payment.status}
                           </span>
                         </td>

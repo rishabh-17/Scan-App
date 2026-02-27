@@ -114,22 +114,44 @@ const centerApprove = (req, res) => approveEntry(req, res, 'center');
 const projectApprove = (req, res) => approveEntry(req, res, 'project');
 const financeApprove = (req, res) => approveEntry(req, res, 'finance');
 
-// Get pending approvals
+// Get entries (pending or approved)
 const getPendingEntries = async (req, res) => {
   try {
-    let query = { status: { $ne: 'locked' } };
+    const { type } = req.query;
+    let query = {};
 
-    // Role-based filtering
-    if (req.user.role === 'supervisor') {
-      query.status = 'entered';
-    } else if (req.user.role === 'center_manager') {
-      query.status = 'supervisor_verified';
-    } else if (req.user.role === 'project_manager') {
-      query.status = 'center_approved';
-    } else if (req.user.role === 'finance_manager') {
-      query.status = 'project_approved';
+    if (type === 'approved') {
+      // Show entries that have been approved by this role
+      if (req.user.role === 'supervisor') {
+        query.status = { $in: ['supervisor_verified', 'center_approved', 'project_approved', 'finance_approved', 'locked'] };
+      } else if (req.user.role === 'center_manager') {
+        query.status = { $in: ['center_approved', 'project_approved', 'finance_approved', 'locked'] };
+      } else if (req.user.role === 'project_manager') {
+        query.status = { $in: ['project_approved', 'finance_approved', 'locked'] };
+      } else if (req.user.role === 'finance_manager') {
+        query.status = { $in: ['finance_approved', 'locked'] };
+      } else {
+        // Admin sees all fully approved/locked entries
+        query.status = { $in: ['finance_approved', 'locked'] };
+      }
+    } else {
+      // Pending approvals
+      query = { status: { $ne: 'locked' } };
+
+      if (req.user.role === 'supervisor') {
+        query.status = 'entered';
+      } else if (req.user.role === 'center_manager') {
+        query.status = 'supervisor_verified';
+      } else if (req.user.role === 'project_manager') {
+        query.status = 'center_approved';
+      } else if (req.user.role === 'finance_manager') {
+        query.status = 'project_approved';
+      }
+      // Admin sees all pending
+      if (req.user.role === 'admin') {
+        query.status = { $nin: ['finance_approved', 'locked'] };
+      }
     }
-    // Admin sees all
 
     const entries = await ScanEntry.find(query)
       .populate('operatorId', 'name mobile')

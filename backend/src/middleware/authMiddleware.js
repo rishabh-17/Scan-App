@@ -38,4 +38,12 @@ const admin = (req, res, next) => {
   }
 };
 
-module.exports = { protect, admin };
+const finance = (req, res, next) => {
+  if (req.user && (req.user.role === 'admin' || req.user.role === 'finance_manager')) {
+    next();
+  } else {
+    res.status(401).json({ message: 'Not authorized as finance manager' });
+  }
+};
+
+module.exports = { protect, admin, finance };
