@@ -25,7 +25,9 @@ const Login = () => {
       <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
         {/* Header */}
         <div className="mb-6 text-center">
-          <img src={compactLogo} alt="Scanner Logo" className="w-16 h-16 mx-auto mb-4 object-contain" />
+          <div className="bg-gray-900 w-20 h-20 mx-auto mb-4 flex items-center justify-center rounded-xl shadow-sm">
+            <img src={compactLogo} alt="Scanner Logo" className="w-12 h-12 object-contain" />
+          </div>
           <h2 className="text-2xl font-semibold text-gray-900">Welcome back</h2>
           <p className="text-sm text-gray-500 mt-1">Login to Scanner Admin Panel</p>
         </div>

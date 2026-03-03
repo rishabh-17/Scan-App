@@ -15,8 +15,8 @@ const Layout = ({ children }) => {
 
   const isActive = (path) =>
     location.pathname === path
-      ? 'bg-indigo-50 text-indigo-600 font-semibold'
-      : 'text-gray-600 hover:bg-gray-100';
+      ? 'bg-gray-800 text-white font-semibold'
+      : 'text-gray-400 hover:bg-gray-800 hover:text-white';
 
   const getTitle = () => {
     if (location.pathname === '/') return 'Dashboard';
@@ -30,11 +30,11 @@ const Layout = ({ children }) => {
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-gray-200 flex flex-col shadow-sm">
+      <aside className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col shadow-sm">
         {/* Logo */}
-        <div className="px-6 py-5 border-b border-gray-100 flex items-center gap-3">
+        <div className="px-6 py-5 border-b border-gray-800 flex items-center gap-3">
           <img src={compactLogo} alt="Scanner Logo" className="w-8 h-8 object-contain" />
-          <h2 className="text-xl font-bold text-gray-900 tracking-tight">
+          <h2 className="text-xl font-bold text-white tracking-tight">
             Scanner Admin
           </h2>
         </div>
@@ -86,10 +86,10 @@ const Layout = ({ children }) => {
         </nav>
 
         {/* User card */}
-        <div className="p-4 border-t border-gray-100">
-          <div className="bg-gray-50 rounded-lg p-3">
-            <p className="text-xs text-gray-500">Logged in as</p>
-            <p className="text-sm font-semibold text-gray-800 truncate">
+        <div className="p-4 border-t border-gray-800">
+          <div className="bg-gray-800 rounded-lg p-3">
+            <p className="text-xs text-gray-400">Logged in as</p>
+            <p className="text-sm font-semibold text-white truncate">
               {user?.name}
             </p>
             <p className="text-xs text-gray-400 capitalize">{user?.role}</p>
