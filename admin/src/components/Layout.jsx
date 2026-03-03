@@ -32,11 +32,8 @@ const Layout = ({ children }) => {
       {/* Sidebar */}
       <aside className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col shadow-sm">
         {/* Logo */}
-        <div className="px-6 py-5 border-b border-gray-800 flex items-center gap-3">
-          <img src={compactLogo} alt="Scanner Logo" className="w-8 h-8 object-contain" />
-          <h2 className="text-xl font-bold text-white tracking-tight">
-            Scanner Admin
-          </h2>
+        <div className="px-6 py-6 border-b border-gray-800 flex justify-center items-center">
+          <img src={compactLogo} alt="Scanner Logo" className="w-16 h-16 object-contain" />
         </div>
 
         {/* Nav */}

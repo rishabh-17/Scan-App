@@ -48,24 +48,60 @@ const Payroll = () => {
   };
 
   const handleExport = () => {
-    const exportData = payrollData.map(item => ({
-      'Operator Name': item.operatorName,
-      'Project': item.projectName,
-      'Total Scans': item.totalScans,
-      'Rate': item.rate,
-      'Total Amount': item.totalAmount,
-      'Mobile': item.mobile || 'N/A',
-      'Center': item.center || 'N/A',
-      'Bank Account': item.bankDetails?.accountNo || 'N/A',
-      'IFSC Code': item.bankDetails?.ifscCode || 'N/A',
-      'PAN Number': item.panNumber || 'N/A',
-      'Status': 'Pending/Approved', // Placeholder as aggregation groups multiple statuses
-    }));
+    // 1. Calculate Header / Company Debit Data
+    const totalAmount = calculateTotalPayout();
+    const date = new Date();
+    const monthYear = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }).toUpperCase();
+    const narrative = `${monthYear} PYMT`;
 
-    const ws = XLSX.utils.json_to_sheet(exportData);
+    // 2. Define Rows
+    const headerRow = ['FILEHDR', 'COEMPTPVTLTD', '1', '', '', ''];
+    const companyDebitRow = [
+      '15170',          // Company Code / Transaction Type
+      '15170932310',    // Company Account Number
+      'INR',
+      'DR',
+      totalAmount,
+      narrative
+    ];
+
+    // 3. Build Staff Credit Rows
+    const staffRows = payrollData.map((item, index) => {
+      // Logic for the first column (ID/Code): Using a sequential ID or derived from account if needed.
+      // For now, using a simple logic or keeping it static/derived. 
+      // The user example had '1141', '10210' which look like first digits of account or random.
+      // We'll use a generated reference ID based on index to ensure uniqueness, or just a static '10000'.
+      // Let's use a static '50000' or similar for staff payments to distinguish.
+      // OR, we can try to mimic the user's example if it was significant.
+      // User Example: 1141 for 1.14112E+12. It matches first 4 digits.
+      const accountNo = item.bankDetails?.accountNo || '';
+      const refCode = accountNo.length >= 4 ? accountNo.substring(0, 4) : '0000';
+
+      return [
+        refCode,                // Reference / Prefix
+        accountNo,              // Bank Account
+        'INR',
+        'CR',
+        item.totalAmount,       // Amount
+        `To ${item.operatorName}` // Narrative
+      ];
+    });
+
+    // 4. Combine all rows
+    const data = [
+      headerRow,
+      companyDebitRow,
+      ...staffRows
+    ];
+
+    // 5. Create Sheet
+    const ws = XLSX.utils.aoa_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Payroll");
-    XLSX.writeFile(wb, "payroll_export.xlsx");
+
+    // 6. Generate Filename with Date
+    const fileName = `Payroll_Export_${monthYear.replace(' ', '_')}.xlsx`;
+    XLSX.writeFile(wb, fileName);
   };
 
   const handleFileChange = async (e) => {
