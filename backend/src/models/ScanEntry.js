@@ -22,30 +22,19 @@ const scanEntrySchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['entered', 'supervisor_verified', 'center_approved', 'project_approved', 'finance_approved', 'locked'],
     default: 'entered',
   },
+  rejectionReason: {
+    type: String,
+  },
   approvals: {
-    supervisor: {
+    type: Map,
+    of: new mongoose.Schema({
       approved: { type: Boolean, default: false },
       by: { type: mongoose.Schema.Types.ObjectId, ref: 'Staff' },
       date: Date,
-    },
-    center: {
-      approved: { type: Boolean, default: false },
-      by: { type: mongoose.Schema.Types.ObjectId, ref: 'Staff' },
-      date: Date,
-    },
-    project: {
-      approved: { type: Boolean, default: false },
-      by: { type: mongoose.Schema.Types.ObjectId, ref: 'Staff' },
-      date: Date,
-    },
-    finance: {
-      approved: { type: Boolean, default: false },
-      by: { type: mongoose.Schema.Types.ObjectId, ref: 'Staff' },
-      date: Date,
-    },
+    }, { _id: false }),
+    default: {}
   },
   auditTrail: [
     {

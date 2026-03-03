@@ -26,42 +26,37 @@ const Dashboard = () => {
     }
   };
 
-  const handleApprove = async (id, currentStatus) => {
+  const handleApprove = async (id) => {
     try {
-      let endpoint = '';
-      if (currentStatus === 'entered') endpoint = `/scan-entry/${id}/verify`;
-      else if (currentStatus === 'supervisor_verified') endpoint = `/scan-entry/${id}/approve-center`;
-      else if (currentStatus === 'center_approved') endpoint = `/scan-entry/${id}/approve-project`;
-      else if (currentStatus === 'project_approved') endpoint = `/scan-entry/${id}/approve-finance`;
-
-      if (!endpoint) return;
-
-      await api.put(endpoint);
+      await api.put(`/scan-entry/${id}/approve`);
       fetchEntries();
     } catch (err) {
-      alert('Approval failed');
+      alert('Approval failed: ' + (err.response?.data?.message || err.message));
     }
   };
 
-  const getNextAction = (status) => {
-    switch (status) {
-      case 'entered': return 'Verify';
-      case 'supervisor_verified': return 'Approve Center';
-      case 'center_approved': return 'Approve Project';
-      case 'project_approved': return 'Approve Finance';
-      case 'finance_approved': return 'Done';
-      default: return '';
+  const handleReject = async (id) => {
+    const reason = prompt('Enter rejection reason:');
+    if (!reason) return;
+    try {
+      await api.put(`/scan-entry/${id}/reject`, { reason });
+      fetchEntries();
+    } catch (err) {
+      alert('Rejection failed: ' + (err.response?.data?.message || err.message));
     }
+  };
+
+  const getNextAction = (entry) => {
+    if (entry.actions?.includes('APPROVE')) return 'Approve';
+    return '';
   };
 
   const canApprove = (entry) => {
-    if (activeTab === 'approved') return false;
-    if (user.role === 'admin') return true;
-    if (user.role === 'supervisor' && entry.status === 'entered') return true;
-    if (user.role === 'center_manager' && entry.status === 'supervisor_verified') return true;
-    if (user.role === 'project_manager' && entry.status === 'center_approved') return true;
-    if (user.role === 'finance_manager' && entry.status === 'project_approved') return true;
-    return false;
+    return entry.actions?.includes('APPROVE');
+  };
+
+  const canReject = (entry) => {
+    return entry.actions?.includes('REJECT');
   };
 
   const getStatusBadge = (status) => {
@@ -156,14 +151,24 @@ const Dashboard = () => {
                     </td>
 
                     <td className="px-6 py-4 text-right">
-                      {entry.status !== 'finance_approved' && canApprove(entry) && (
-                        <button
-                          onClick={() => handleApprove(entry._id, entry.status)}
-                          className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition"
-                        >
-                          {getNextAction(entry.status)}
-                        </button>
-                      )}
+                      <div className="flex justify-end gap-2">
+                        {canApprove(entry) && (
+                          <button
+                            onClick={() => handleApprove(entry._id)}
+                            className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-green-700 bg-green-100 rounded-lg hover:bg-green-200 transition"
+                          >
+                            {getNextAction(entry)}
+                          </button>
+                        )}
+                        {canReject(entry) && (
+                          <button
+                            onClick={() => handleReject(entry._id)}
+                            className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-red-700 bg-red-100 rounded-lg hover:bg-red-200 transition"
+                          >
+                            Reject
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

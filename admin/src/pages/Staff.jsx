@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 
 const Staff = () => {
+  const navigate = useNavigate();
   const [staffList, setStaffList] = useState([]);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -217,6 +219,12 @@ const Staff = () => {
                     </td>
 
                     <td className="px-6 py-4 text-right space-x-3">
+                      <button
+                        onClick={() => navigate(`/staff/${staff._id}`)}
+                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                      >
+                        View
+                      </button>
                       <button
                         onClick={() => handleEditClick(staff)}
                         className="text-indigo-600 hover:text-indigo-800 text-sm font-medium"

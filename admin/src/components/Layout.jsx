@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
+import compactLogo from '../assets/compact_logo.png';
 
 const Layout = ({ children }) => {
   const { user, logout } = useAuth();
@@ -31,7 +32,8 @@ const Layout = ({ children }) => {
       {/* Sidebar */}
       <aside className="w-64 bg-white border-r border-gray-200 flex flex-col shadow-sm">
         {/* Logo */}
-        <div className="px-6 py-5 border-b border-gray-100">
+        <div className="px-6 py-5 border-b border-gray-100 flex items-center gap-3">
+          <img src={compactLogo} alt="Scanner Logo" className="w-8 h-8 object-contain" />
           <h2 className="text-xl font-bold text-gray-900 tracking-tight">
             Scanner Admin
           </h2>

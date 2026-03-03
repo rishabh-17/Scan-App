@@ -47,7 +47,26 @@ const getMyEntries = async (req, res) => {
   }
 };
 
-// Generic approval function
+const { createActor } = require('xstate');
+const scanEntryMachine = require('../workflows/scanEntryWorkflow');
+const workflowConfig = require('../workflows/workflow.json');
+
+// Helper to find statuses that a role can approve
+const getApprovableStatuses = (role) => {
+  const statuses = [];
+  for (const [stateName, stateDef] of Object.entries(workflowConfig.states)) {
+    const transitions = stateDef.on;
+    if (transitions && transitions.APPROVE) {
+      const guard = transitions.APPROVE.guard;
+      if (guard && guard.type === 'checkRole' && guard.params && guard.params.role === role) {
+        statuses.push(stateName);
+      }
+    }
+  }
+  return statuses;
+};
+
+// Generic approval function (dynamic)
 const approveEntry = async (req, res, level) => {
   try {
     const entry = await ScanEntry.findById(req.params.id);
@@ -56,49 +75,117 @@ const approveEntry = async (req, res, level) => {
       return res.status(404).json({ message: 'Entry not found' });
     }
 
-    // Role checks
-    const canApprove =
-      req.user.role === 'admin' ||
-      (level === 'supervisor' && req.user.role === 'supervisor') ||
-      (level === 'center' && req.user.role === 'center_manager') ||
-      (level === 'project' && req.user.role === 'project_manager') ||
-      (level === 'finance' && req.user.role === 'finance_manager');
+    // Initialize actor with current state via snapshot
+    // We construct a minimal valid snapshot for XState v5
+    const actor = createActor(scanEntryMachine, {
+      snapshot: {
+        status: 'active',
+        output: undefined,
+        error: undefined,
+        value: entry.status,
+        context: { user: req.user, entry: entry },
+        children: {},
+        historyValue: {}
+      }
+    });
 
-    if (!canApprove) {
-      return res.status(403).json({ message: 'Not authorized to approve at this level' });
+    actor.start();
+
+    // Send generic APPROVE event
+    // The machine determines if transition is valid based on guards
+    actor.send({ type: 'APPROVE' });
+    const nextSnapshot = actor.getSnapshot();
+
+    if (nextSnapshot.value === entry.status) {
+      // Status didn't change, meaning transition failed (guard or invalid event)
+      return res.status(400).json({ message: `Cannot perform approval on status ${entry.status} or unauthorized.` });
     }
 
-    // Status logic
-    let nextStatus = entry.status;
-    let actionName = '';
+    // Apply updates
+    entry.status = nextSnapshot.value;
 
-    if (level === 'supervisor') {
-      nextStatus = 'supervisor_verified';
-      actionName = 'Supervisor Verified';
-    } else if (level === 'center') {
-      if (entry.status !== 'supervisor_verified') return res.status(400).json({ message: 'Must be supervisor verified first' });
-      nextStatus = 'center_approved';
-      actionName = 'Center Approved';
-    } else if (level === 'project') {
-      if (entry.status !== 'center_approved') return res.status(400).json({ message: 'Must be center approved first' });
-      nextStatus = 'project_approved';
-      actionName = 'Project Approved';
-    } else if (level === 'finance') {
-      if (entry.status !== 'project_approved') return res.status(400).json({ message: 'Must be project approved first' });
-      nextStatus = 'finance_approved';
-      actionName = 'Finance Approved';
+    // Determine action name and approval field based on new state
+    let actionName = `Approved to ${entry.status}`;
+    let approvalField = '';
+
+    // Dynamic mapping: "supervisor_verified" -> "supervisor", "center_approved" -> "center"
+    const match = entry.status.match(/^(.+)_(approved|verified)$/);
+    if (match) {
+      approvalField = match[1];
+      // Capitalize for Action Name
+      const roleName = approvalField.charAt(0).toUpperCase() + approvalField.slice(1);
+      const actionType = match[2] === 'verified' ? 'Verified' : 'Approved';
+      actionName = `${roleName} ${actionType}`;
     }
 
-    entry.status = nextStatus;
-    entry.approvals[level] = {
-      approved: true,
-      by: req.user.id,
-      date: Date.now(),
-    };
+    if (approvalField) {
+      const approvalData = {
+        approved: true,
+        by: req.user.id,
+        date: Date.now(),
+      };
+
+      if (entry.approvals instanceof Map) {
+        entry.approvals.set(approvalField, approvalData);
+      } else {
+        // Fallback if not Map (though schema defines it as Map)
+        if (!entry.approvals) entry.approvals = {};
+        entry.approvals[approvalField] = approvalData;
+      }
+    }
+
     entry.auditTrail.push({
       action: actionName,
       by: req.user.id,
       details: `${actionName} by ${req.user.name}`,
+    });
+
+    await entry.save();
+    res.json(entry);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// Reject entry
+const rejectEntry = async (req, res) => {
+  try {
+    const { reason } = req.body;
+    const entry = await ScanEntry.findById(req.params.id);
+
+    if (!entry) {
+      return res.status(404).json({ message: 'Entry not found' });
+    }
+
+    // Check transition using XState Actor
+    const actor = createActor(scanEntryMachine, {
+      snapshot: {
+        status: 'active',
+        output: undefined,
+        error: undefined,
+        value: entry.status,
+        context: { user: req.user, entry: entry },
+        children: {},
+        historyValue: {}
+      }
+    });
+    actor.start();
+    actor.send({ type: 'REJECT' });
+    const nextSnapshot = actor.getSnapshot();
+
+    if (nextSnapshot.value === entry.status) {
+      return res.status(400).json({ message: `Cannot reject entry in status ${entry.status} or unauthorized.` });
+    }
+
+    entry.status = nextSnapshot.value;
+    entry.rejectionReason = reason || 'Rejected by ' + req.user.role;
+
+    entry.auditTrail.push({
+      action: 'Rejected',
+      by: req.user.id,
+      details: `Rejected by ${req.user.name} (${req.user.role}). Reason: ${reason}`,
+      date: Date.now()
     });
 
     await entry.save();
@@ -122,42 +209,67 @@ const getPendingEntries = async (req, res) => {
 
     if (type === 'approved') {
       // Show entries that have been approved by this role
-      if (req.user.role === 'supervisor') {
-        query.status = { $in: ['supervisor_verified', 'center_approved', 'project_approved', 'finance_approved', 'locked'] };
-      } else if (req.user.role === 'center_manager') {
-        query.status = { $in: ['center_approved', 'project_approved', 'finance_approved', 'locked'] };
-      } else if (req.user.role === 'project_manager') {
-        query.status = { $in: ['project_approved', 'finance_approved', 'locked'] };
-      } else if (req.user.role === 'finance_manager') {
-        query.status = { $in: ['finance_approved', 'locked'] };
+      // Dynamic: infer approval field from role (e.g. center_manager -> center)
+      if (req.user.role === 'admin') {
+        const finalStates = Object.entries(workflowConfig.states)
+          .filter(([_, def]) => def.type === 'final')
+          .map(([name, _]) => name);
+        query.status = { $in: finalStates }; // Admin sees completed entries
       } else {
-        // Admin sees all fully approved/locked entries
-        query.status = { $in: ['finance_approved', 'locked'] };
+        const approvalField = req.user.role.replace('_manager', '');
+        // Query the map field using dot notation
+        query[`approvals.${approvalField}.approved`] = true;
       }
     } else {
       // Pending approvals
       query = { status: { $ne: 'locked' } };
 
-      if (req.user.role === 'supervisor') {
-        query.status = 'entered';
-      } else if (req.user.role === 'center_manager') {
-        query.status = 'supervisor_verified';
-      } else if (req.user.role === 'project_manager') {
-        query.status = 'center_approved';
-      } else if (req.user.role === 'finance_manager') {
-        query.status = 'project_approved';
-      }
-      // Admin sees all pending
       if (req.user.role === 'admin') {
-        query.status = { $nin: ['finance_approved', 'locked'] };
+        const finalStates = Object.entries(workflowConfig.states)
+          .filter(([_, def]) => def.type === 'final')
+          .map(([name, _]) => name);
+        query.status = { $nin: finalStates };
+      } else {
+        const approvableStatuses = getApprovableStatuses(req.user.role);
+        if (approvableStatuses.length > 0) {
+          query.status = { $in: approvableStatuses };
+        } else {
+          // No pending approvals for this role
+          return res.json([]);
+        }
       }
     }
 
     const entries = await ScanEntry.find(query)
       .populate('operatorId', 'name mobile')
       .populate('projectId', 'name center')
-      .sort({ date: -1 });
-    res.json(entries);
+      .sort({ date: -1 })
+      .lean();
+
+    // Enrich entries with available actions for the current user
+    const entriesWithActions = entries.map(entry => {
+      const actor = createActor(scanEntryMachine, {
+        snapshot: {
+          status: 'active',
+          output: undefined,
+          error: undefined,
+          value: entry.status,
+          context: { user: req.user, entry: entry },
+          children: {},
+          historyValue: {}
+        }
+      });
+      actor.start();
+      const snapshot = actor.getSnapshot();
+
+      const actions = [];
+      if (snapshot.can({ type: 'APPROVE' })) actions.push('APPROVE');
+      if (snapshot.can({ type: 'REJECT' })) actions.push('REJECT');
+
+      return { ...entry, actions };
+    });
+
+    res.json(entriesWithActions);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -171,5 +283,7 @@ module.exports = {
   centerApprove,
   projectApprove,
   financeApprove,
-  getPendingEntries
+  rejectEntry,
+  getPendingEntries,
+  approveEntry
 };

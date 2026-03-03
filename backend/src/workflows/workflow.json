@@ -1,0 +1,81 @@
+{
+  "id": "scanEntry",
+  "initial": "entered",
+  "context": {},
+  "states": {
+    "entered": {
+      "on": {
+        "APPROVE": {
+          "target": "supervisor_verified",
+          "guard": {
+            "type": "checkRole",
+            "params": {
+              "role": "supervisor"
+            }
+          }
+        },
+        "REJECT": {
+          "target": "rejected",
+          "guard": "canReject"
+        }
+      }
+    },
+    "supervisor_verified": {
+      "on": {
+        "APPROVE": {
+          "target": "center_approved",
+          "guard": {
+            "type": "checkRole",
+            "params": {
+              "role": "center_manager"
+            }
+          }
+        },
+        "REJECT": {
+          "target": "rejected",
+          "guard": "canReject"
+        }
+      }
+    },
+    "center_approved": {
+      "on": {
+        "APPROVE": {
+          "target": "project_approved",
+          "guard": {
+            "type": "checkRole",
+            "params": {
+              "role": "project_manager"
+            }
+          }
+        },
+        "REJECT": {
+          "target": "rejected",
+          "guard": "canReject"
+        }
+      }
+    },
+    "project_approved": {
+      "on": {
+        "APPROVE": {
+          "target": "finance_approved",
+          "guard": {
+            "type": "checkRole",
+            "params": {
+              "role": "finance_manager"
+            }
+          }
+        },
+        "REJECT": {
+          "target": "rejected",
+          "guard": "canReject"
+        }
+      }
+    },
+    "finance_approved": {
+      "type": "final"
+    },
+    "rejected": {
+      "type": "final"
+    }
+  }
+}

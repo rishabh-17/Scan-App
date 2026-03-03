@@ -107,8 +107,26 @@ const deleteStaff = async (req, res) => {
     }
 };
 
+const getStaffById = async (req, res) => {
+    try {
+        const staff = await Staff.findById(req.params.id)
+            .select('-password')
+            .populate('project', 'name center scanRate');
+
+        if (staff) {
+            res.json(staff);
+        } else {
+            res.status(404).json({ message: 'Staff not found' });
+        }
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
 module.exports = {
     getAllStaff,
+    getStaffById,
     updateStaff,
-    deleteStaff,
+    deleteStaff
 };

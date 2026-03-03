@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Staff from './pages/Staff';
+import StaffDetail from './pages/StaffDetail';
 import Users from './pages/Users';
 import Payroll from './pages/Payroll';
 import Projects from './pages/Projects';
@@ -34,6 +35,13 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <Staff />
+              </Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/staff/:id" element={
+            <ProtectedRoute>
+              <Layout>
+                <StaffDetail />
               </Layout>
             </ProtectedRoute>
           } />

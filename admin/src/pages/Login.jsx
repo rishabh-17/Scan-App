@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import compactLogo from '../assets/compact_logo.png';
 
 const Login = () => {
   const [mobile, setMobile] = useState('');
@@ -24,6 +25,7 @@ const Login = () => {
       <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
         {/* Header */}
         <div className="mb-6 text-center">
+          <img src={compactLogo} alt="Scanner Logo" className="w-16 h-16 mx-auto mb-4 object-contain" />
           <h2 className="text-2xl font-semibold text-gray-900">Welcome back</h2>
           <p className="text-sm text-gray-500 mt-1">Login to Scanner Admin Panel</p>
         </div>
