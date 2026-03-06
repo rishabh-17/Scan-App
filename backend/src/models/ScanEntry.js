@@ -11,6 +11,18 @@ const scanEntrySchema = new mongoose.Schema({
     ref: 'Project',
     required: true,
   },
+  centerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Center',
+  },
+  activityType: {
+    type: String,
+    default: 'Scanning',
+  },
+  amount: {
+    type: Number,
+    default: 0,
+  },
   scans: {
     type: Number,
     required: true,

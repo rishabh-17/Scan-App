@@ -39,11 +39,27 @@ const admin = (req, res, next) => {
 };
 
 const finance = (req, res, next) => {
-  if (req.user && (req.user.role === 'admin' || req.user.role === 'finance_manager')) {
+  if (req.user && (req.user.role === 'admin' || req.user.role === 'finance_hr')) {
     next();
   } else {
     res.status(401).json({ message: 'Not authorized as finance manager' });
   }
 };
 
-module.exports = { protect, admin, finance };
+const staffManager = (req, res, next) => {
+  if (req.user && (req.user.role === 'admin' || req.user.role === 'center_supervisor')) {
+    next();
+  } else {
+    res.status(401).json({ message: 'Not authorized as staff manager' });
+  }
+};
+
+const staffViewer = (req, res, next) => {
+  if (req.user && (req.user.role === 'admin' || req.user.role === 'finance_hr' || req.user.role === 'center_supervisor')) {
+    next();
+  } else {
+    res.status(401).json({ message: 'Not authorized to view staff' });
+  }
+};
+
+module.exports = { protect, admin, finance, staffManager, staffViewer };

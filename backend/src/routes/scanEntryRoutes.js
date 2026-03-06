@@ -3,28 +3,26 @@ const router = express.Router();
 const {
     createScanEntry,
     getMyEntries,
-    verifyEntry,
-    centerApprove,
-    projectApprove,
-    financeApprove,
     rejectEntry,
     getPendingEntries,
-    approveEntry
+    approveEntry,
+    getStats,
+    validateBulkUpload,
+    bulkCreateScanEntries,
+    getBulkUploadHistory
 } = require('../controllers/scanEntryController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
+router.get('/stats', protect, getStats);
 router.post('/', protect, createScanEntry);
+router.post('/bulk-validate', protect, validateBulkUpload);
+router.post('/bulk-create', protect, bulkCreateScanEntries);
+router.get('/bulk-history', protect, getBulkUploadHistory);
 router.get('/my-entries', protect, getMyEntries);
 
 // Approval Routes
-// Dynamic/Generic approval route
+// Generic approval route
 router.put('/:id/approve', protect, approveEntry);
-
-// Legacy routes for backward compatibility
-router.put('/:id/verify', protect, verifyEntry);
-router.put('/:id/approve-center', protect, centerApprove);
-router.put('/:id/approve-project', protect, projectApprove);
-router.put('/:id/approve-finance', protect, financeApprove);
 router.put('/:id/reject', protect, rejectEntry);
 
 // Admin Dashboard routes

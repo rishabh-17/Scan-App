@@ -8,20 +8,20 @@ Open `backend/src/workflows/workflow.json`. This file defines the states (steps)
 
 ### Example: Adding a "Regional Manager" Approval
 
-Suppose you want to add a `regional_approved` step between `center_approved` and `project_approved`.
+Suppose you want to add a `regional_approved` step between `entered` and `project_approved`.
 
-1.  **Locate the `center_approved` state**:
+1.  **Locate the `entered` state**:
     Change its `APPROVE` target from `project_approved` to your new state `regional_approved`.
 
     ```json
-    "center_approved": {
+    "entered": {
       "on": {
         "APPROVE": {
           "target": "regional_verified",  <-- Changed target
           "guard": {
             "type": "checkRole",
             "params": {
-              "role": "center_manager"
+              "role": "regional_manager"
             }
           }
         },

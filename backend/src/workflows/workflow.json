@@ -6,28 +6,11 @@
     "entered": {
       "on": {
         "APPROVE": {
-          "target": "supervisor_verified",
+          "target": "project_approved",
           "guard": {
             "type": "checkRole",
             "params": {
-              "role": "supervisor"
-            }
-          }
-        },
-        "REJECT": {
-          "target": "rejected",
-          "guard": "canReject"
-        }
-      }
-    },
-    "supervisor_verified": {
-      "on": {
-        "APPROVE": {
-          "target": "center_approved",
-          "guard": {
-            "type": "checkRole",
-            "params": {
-              "role": "center_manager"
+              "role": "project_manager"
             }
           }
         },
@@ -61,7 +44,7 @@
           "guard": {
             "type": "checkRole",
             "params": {
-              "role": "finance_manager"
+              "role": "finance_hr"
             }
           }
         },

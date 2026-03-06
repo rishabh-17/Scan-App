@@ -6,13 +6,30 @@ const projectSchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
-  center: {
+  clientName: {
     type: String,
-    required: true,
   },
+  projectCode: {
+    type: String,
+  },
+  startDate: {
+    type: Date,
+  },
+  endDate: {
+    type: Date,
+  },
+  centers: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Center',
+  }],
+  managers: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Staff',
+  }],
   scanRate: {
     type: Number,
-    required: true, // Rate per scan
+    default: 0,
+    // required: true, // Rate per scan - No longer required as per user request
   },
   productivityLimit: {
     type: Number, // Max scans per day per operator if applicable
@@ -21,6 +38,12 @@ const projectSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
   },
+  rateChart: [{
+    activityName: { type: String, required: true },
+    rate: { type: Number, required: true },
+    effectiveDate: { type: Date, default: Date.now },
+    status: { type: String, enum: ['active', 'inactive'], default: 'active' }
+  }]
 }, {
   timestamps: true,
 });

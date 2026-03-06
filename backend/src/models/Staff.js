@@ -8,28 +8,56 @@ const staffSchema = new mongoose.Schema({
   employeeId: {
     type: String,
     unique: true,
-    sparse: true, // Allows null/undefined values to be non-unique
+    sparse: true, // Allow multiple documents to have no employeeId
   },
-  scannerId: {
+  // scannerId removed as per requirement
+  dob: {
+    type: Date,
+  },
+  address: {
+    type: String,
+  },
+  city: {
+    type: String,
+  },
+  state: {
+    type: String,
+  },
+  pincode: {
+    type: String,
+  },
+  aadhaarNumber: {
     type: String,
     unique: true,
     sparse: true,
   },
-  bankDetails: {
-    accountNo: { type: String },
-    ifscCode: { type: String },
-  },
-  address: {
-    type: String,
+  aadhaarDoc: {
+    type: String, // Path to uploaded file
   },
   panNumber: {
     type: String,
     unique: true,
     sparse: true,
   },
+  panDoc: {
+    type: String, // Path to uploaded file
+  },
+  bankDetails: {
+    accountNo: { type: String },
+    confirmAccountNo: { type: String }, // Virtual, not stored? Or validation only. Store for now if needed or handle in controller. Ideally not stored.
+    ifscCode: { type: String },
+    bankName: { type: String },
+    accountHolderName: { type: String },
+    cancelledChequeDoc: { type: String }, // Path to uploaded file
+  },
   mobile: {
     type: String,
     required: true,
+    unique: true,
+  },
+  email: {
+    type: String,
+    sparse: true,
     unique: true,
   },
   photo: {
@@ -39,8 +67,8 @@ const staffSchema = new mongoose.Schema({
     type: String, // URL or base64
   },
   center: {
-    type: String,
-    required: true,
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Center',
   },
   project: {
     type: mongoose.Schema.Types.ObjectId,
@@ -53,7 +81,7 @@ const staffSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['staff', 'supervisor', 'center_manager', 'project_manager', 'finance_manager', 'admin'],
+    enum: ['center_supervisor', 'project_manager', 'finance_hr', 'admin', 'staff'],
     default: 'staff',
   },
   password: {

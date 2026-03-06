@@ -14,20 +14,13 @@ const createUsers = async () => {
 
     const users = [
       {
-        name: 'Supervisor User',
+        name: 'Center Supervisor',
         mobile: '9000000001',
         password,
-        role: 'supervisor',
+        role: 'center_supervisor',
         center: 'Center A',
         status: 'active',
-      },
-      {
-        name: 'Center Manager',
-        mobile: '9000000002',
-        password,
-        role: 'center_manager',
-        center: 'Center A',
-        status: 'active',
+        employeeId: 'CS001',
       },
       {
         name: 'Project Manager',
@@ -36,14 +29,16 @@ const createUsers = async () => {
         role: 'project_manager',
         center: 'Head Office',
         status: 'active',
+        employeeId: 'PM001',
       },
       {
-        name: 'Finance Manager',
+        name: 'Finance/HR',
         mobile: '9000000004',
         password,
-        role: 'finance_manager',
+        role: 'finance_hr',
         center: 'Head Office',
         status: 'active',
+        employeeId: 'FH001',
       },
       {
         name: 'Super Admin',
@@ -52,16 +47,18 @@ const createUsers = async () => {
         role: 'admin',
         center: 'Head Office',
         status: 'active',
+        employeeId: 'AD001',
       },
     ];
 
     for (const user of users) {
-      const exists = await Staff.findOne({ mobile: user.mobile });
+      let exists = await Staff.findOne({ mobile: user.mobile });
       if (exists) {
         // Update existing user to ensure correct role/password if needed
         exists.role = user.role;
-        exists.password = user.password;
+        exists.password = user.password; // Reset password
         exists.status = 'active';
+        if (!exists.employeeId) exists.employeeId = user.employeeId;
         await exists.save();
         console.log(`Updated user: ${user.name} (${user.role})`);
       } else {

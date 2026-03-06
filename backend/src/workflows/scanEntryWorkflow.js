@@ -16,7 +16,7 @@ const scanEntryMachine = createMachine({
       return userRole === requiredRole || userRole === 'admin';
     },
     canReject: ({ context }) => {
-      const allowedRoles = ['admin', 'supervisor', 'center_manager', 'project_manager', 'finance_manager'];
+      const allowedRoles = ['admin', 'center_supervisor', 'project_manager', 'finance_hr'];
       return allowedRoles.includes(context.user.role);
     }
   }
