@@ -192,9 +192,20 @@ const Staff = () => {
   // Filter projects based on selected center
   const filteredProjects = formData.center
     ? projects.filter(p => {
-      // Handle both string ID and object cases for project.center
-      const projectCenterId = typeof p.center === 'object' ? p.center._id : p.center;
-      return projectCenterId === formData.center;
+      // Handle multiple centers (new schema)
+      if (p.centers && Array.isArray(p.centers)) {
+        return p.centers.some(c => {
+          if (!c) return false;
+          const cId = typeof c === 'object' ? c._id : c;
+          return cId === formData.center;
+        });
+      }
+      // Handle single center (legacy schema or fallback)
+      if (p.center) {
+        const projectCenterId = typeof p.center === 'object' ? p.center._id : p.center;
+        return projectCenterId === formData.center;
+      }
+      return false;
     })
     : [];
 

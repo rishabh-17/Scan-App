@@ -256,10 +256,32 @@ const getPendingEntries = async (req, res) => {
         query.status = { $nin: finalStates };
       } else {
         // Filter by Assigned Scope
-        if (req.user.role === 'center_supervisor' && req.user.center) {
-          query.centerId = req.user.center;
-        } else if (req.user.role === 'project_manager' && req.user.project) {
-          query.projectId = req.user.project;
+        if (req.user.role === 'center_supervisor') {
+          if (req.user.center) {
+            query.centerId = req.user.center;
+          } else {
+            // Fallback: Check if assigned as supervisor in Center model
+            const centers = await Center.find({ supervisors: req.user._id });
+            if (centers.length > 0) {
+              const centerIds = centers.map(c => c._id);
+              query.centerId = { $in: centerIds };
+            } else {
+              return res.json([]);
+            }
+          }
+        } else if (req.user.role === 'project_manager') {
+          if (req.user.project) {
+            query.projectId = req.user.project;
+          } else {
+            // Fallback: Check if assigned as manager in Project model (Legacy)
+            const projects = await Project.find({ managers: req.user._id });
+            if (projects.length > 0) {
+              const projectIds = projects.map(p => p._id);
+              query.projectId = { $in: projectIds };
+            } else {
+              return res.json([]);
+            }
+          }
         }
 
         const approvableStatuses = getApprovableStatuses(req.user.role);
@@ -348,14 +370,20 @@ const getStats = async (req, res) => {
       if (req.user.center) {
         query.centerId = req.user.center;
       } else {
-        // No center assigned, return empty stats
-        return res.json({
-          totalUnits: 0,
-          totalAmount: 0,
-          pendingCount: 0,
-          approvedCount: 0,
-          rejectedCount: 0
-        });
+        // Fallback: Check if assigned as supervisor in Center model
+        const centers = await Center.find({ supervisors: req.user._id });
+        if (centers.length > 0) {
+          const centerIds = centers.map(c => c._id);
+          query.centerId = { $in: centerIds };
+        } else {
+          return res.json({
+            totalUnits: 0,
+            totalAmount: 0,
+            pendingCount: 0,
+            approvedCount: 0,
+            rejectedCount: 0
+          });
+        }
       }
     }
 

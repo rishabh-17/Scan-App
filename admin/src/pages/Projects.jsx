@@ -52,17 +52,28 @@ const Projects = () => {
 
   const fetchData = async () => {
     try {
-      const [projectsData, centersData, usersData] = await Promise.all([
-        getProjects(),
-        getCenters(),
-        getUsers()
-      ]);
-      setProjects(projectsData);
-      setCenters(centersData);
+      const promises = [getProjects()];
 
-      // Filter users who are project managers
-      const projectManagerUsers = usersData.filter(u => u.role === 'project_manager');
-      setManagers(projectManagerUsers);
+      // Only fetch centers and users if admin (needed for create/edit modal)
+      if (currentUser?.role === 'admin') {
+        promises.push(getCenters());
+        promises.push(getUsers());
+      }
+
+      const results = await Promise.all(promises);
+      const projectsData = results[0];
+      setProjects(projectsData);
+
+      if (currentUser?.role === 'admin') {
+        const centersData = results[1];
+        const usersData = results[2];
+
+        setCenters(centersData);
+
+        // Filter users who are project managers
+        const projectManagerUsers = usersData.filter(u => u.role === 'project_manager');
+        setManagers(projectManagerUsers);
+      }
 
       setLoading(false);
     } catch (error) {

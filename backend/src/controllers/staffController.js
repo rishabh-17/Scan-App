@@ -1,4 +1,5 @@
 const Staff = require('../models/Staff');
+const Center = require('../models/Center');
 const bcrypt = require('bcryptjs');
 
 // @desc    Get all staff
@@ -18,15 +19,17 @@ const getAllStaff = async (req, res) => {
             query.role = { $ne: req.query.excludeRole };
         }
 
-        // RBAC: Center Supervisor sees only staff in their center
+        // RBAC: Center Supervisor sees only staff in their center(s)
         if (req.user && req.user.role === 'center_supervisor') {
-            // Center can be assigned via center field or via user.center
-            // Based on previous interactions, center is assigned via Staff Management
-            // But wait, user removed "Assigned Center" from Users page, saying it's handled in Staff Management.
-            // But a Center Supervisor IS a Staff/User. So their center assignment is in their own record.
-            // Let's check if req.user has center populated.
-            if (req.user.center) {
-                query.center = req.user.center;
+            // Find all centers where this user is a supervisor
+            const managedCenters = await Center.find({ supervisors: req.user._id }).select('_id');
+            const centerIds = managedCenters.map(c => c._id);
+
+            if (centerIds.length > 0) {
+                query.center = { $in: centerIds };
+            } else {
+                // If supervisor has no centers, they see no staff (or maybe just unassigned? No, safer to show none)
+                return res.json([]);
             }
         }
 
@@ -52,8 +55,16 @@ const updateStaff = async (req, res) => {
         if (staff) {
             // RBAC: Center Supervisor checks
             if (req.user.role === 'center_supervisor') {
+                // Find all centers where this user is a supervisor
+                const managedCenters = await Center.find({ supervisors: req.user._id }).select('_id');
+                const centerIds = managedCenters.map(c => c._id.toString());
+
+                if (centerIds.length === 0) {
+                    return res.status(403).json({ message: 'Supervisor has no assigned center' });
+                }
+
                 // Check if staff belongs to supervisor's center
-                if (!staff.center || staff.center.toString() !== req.user.center.toString()) {
+                if (!staff.center || !centerIds.includes(staff.center.toString())) {
                     return res.status(403).json({ message: 'Not authorized to update staff from another center' });
                 }
 
@@ -61,7 +72,7 @@ const updateStaff = async (req, res) => {
                 if (req.body.role && req.body.role !== 'staff') {
                     return res.status(403).json({ message: 'Center Supervisors can only manage Staff role' });
                 }
-                if (req.body.center && req.body.center !== req.user.center.toString()) {
+                if (req.body.center && !centerIds.includes(req.body.center.toString())) {
                     return res.status(403).json({ message: 'Cannot move staff to another center' });
                 }
             }
@@ -169,10 +180,27 @@ const createStaff = async (req, res) => {
 
     // RBAC: Center Supervisor enforcement
     if (req.user.role === 'center_supervisor') {
-        if (!req.user.center) {
-            return res.status(400).json({ message: 'Supervisor has no assigned center' });
+        const managedCenters = await Center.find({ supervisors: req.user._id }).select('_id');
+        const centerIds = managedCenters.map(c => c._id.toString());
+
+        if (centerIds.length === 0) {
+            return res.status(403).json({ message: 'Supervisor has no assigned center' });
         }
-        center = req.user.center; // Force center
+
+        if (!center) {
+            // If only one center, default to it
+            if (centerIds.length === 1) {
+                center = centerIds[0];
+            } else {
+                return res.status(400).json({ message: 'Please select a center' });
+            }
+        } else {
+            // Verify selected center is managed by supervisor
+            if (!centerIds.includes(center)) {
+                return res.status(403).json({ message: 'Not authorized to add staff to this center' });
+            }
+        }
+
         role = 'staff'; // Force role
     }
 
