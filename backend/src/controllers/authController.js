@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const Staff = require('../models/Staff');
+const Center = require('../models/Center');
 
 // Generate JWT
 const generateToken = (id) => {
@@ -13,10 +14,23 @@ const generateToken = (id) => {
 // @route   POST /api/auth/register
 // @access  Public
 const registerStaff = async (req, res) => {
-  const { name, mobile, password, center, role, address, bankDetails, panNumber } = req.body;
+  let { name, mobile, email, dob, address, city, state, pincode, aadhaarNumber, aadhaarDoc, panNumber, panDoc, bankDetails, center, password } = req.body;
 
   if (!name || !mobile || !password || !center) {
     return res.status(400).json({ message: 'Please add all required fields' });
+  }
+
+  // Resolve Center Code to ID if necessary
+  let centerId = center;
+  const isObjectId = /^[0-9a-fA-F]{24}$/.test(center);
+
+  if (!isObjectId) {
+    // Treat as Center Code
+    const centerObj = await Center.findOne({ centerCode: center });
+    if (!centerObj) {
+      return res.status(400).json({ message: 'Invalid Center Code' });
+    }
+    centerId = centerObj._id;
   }
 
   // Validations
@@ -53,12 +67,20 @@ const registerStaff = async (req, res) => {
   if (staffExists) {
     return res.status(400).json({ message: 'Staff already exists' });
   }
-  
+
   // Check if PAN exists
   if (panNumber) {
     const panExists = await Staff.findOne({ panNumber });
     if (panExists) {
       return res.status(400).json({ message: 'PAN number already registered' });
+    }
+  }
+
+  // Check if Aadhaar exists
+  if (aadhaarNumber) {
+    const aadhaarExists = await Staff.findOne({ aadhaarNumber });
+    if (aadhaarExists) {
+      return res.status(400).json({ message: 'Aadhaar number already registered' });
     }
   }
 
@@ -70,15 +92,26 @@ const registerStaff = async (req, res) => {
   const staff = await Staff.create({
     name,
     mobile,
+    email,
+    dob,
     password: hashedPassword,
-    center,
+    center: centerId,
     role: 'staff', // Force role to staff for self-registration
     status: 'pending', // Explicitly set pending status
     address: address || '',
+    city: city || '',
+    state: state || '',
+    pincode: pincode || '',
+    aadhaarNumber: aadhaarNumber || '',
+    aadhaarDoc: aadhaarDoc || '',
     panNumber: panNumber || '',
+    panDoc: panDoc || '',
     bankDetails: {
       accountNo: bankDetails?.accountNo || '',
       ifscCode: bankDetails?.ifscCode || '',
+      bankName: bankDetails?.bankName || '',
+      accountHolderName: bankDetails?.accountHolderName || '',
+      cancelledChequeDoc: bankDetails?.cancelledChequeDoc || '',
     },
   });
 
@@ -141,10 +174,16 @@ const updateProfile = async (req, res) => {
     return res.status(404).json({ message: 'User not found' });
   }
 
-  const { name, address, bankDetails, panNumber } = req.body;
+  const { name, email, dob, address, city, state, pincode, aadhaarNumber, bankDetails, panNumber } = req.body;
 
   if (name) user.name = name;
+  if (email) user.email = email;
+  if (dob) user.dob = dob;
   if (address) user.address = address;
+  if (city) user.city = city;
+  if (state) user.state = state;
+  if (pincode) user.pincode = pincode;
+  if (aadhaarNumber) user.aadhaarNumber = aadhaarNumber;
 
   if (panNumber) {
     const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
@@ -174,6 +213,8 @@ const updateProfile = async (req, res) => {
       }
       user.bankDetails.ifscCode = bankDetails.ifscCode;
     }
+    if (bankDetails.bankName) user.bankDetails.bankName = bankDetails.bankName;
+    if (bankDetails.accountHolderName) user.bankDetails.accountHolderName = bankDetails.accountHolderName;
   }
 
   const updatedUser = await user.save();
@@ -182,10 +223,16 @@ const updateProfile = async (req, res) => {
     _id: updatedUser._id,
     name: updatedUser.name,
     mobile: updatedUser.mobile,
+    email: updatedUser.email,
+    dob: updatedUser.dob,
     role: updatedUser.role,
     center: updatedUser.center,
     project: updatedUser.project,
     address: updatedUser.address,
+    city: updatedUser.city,
+    state: updatedUser.state,
+    pincode: updatedUser.pincode,
+    aadhaarNumber: updatedUser.aadhaarNumber,
     panNumber: updatedUser.panNumber,
     bankDetails: updatedUser.bankDetails,
     token: generateToken(updatedUser._id),

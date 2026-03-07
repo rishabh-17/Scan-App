@@ -95,9 +95,23 @@ const deleteCenter = async (req, res) => {
   }
 };
 
+// @desc    Get public centers list for registration
+// @route   GET /api/centers/public
+// @access  Public
+const getPublicCenters = async (req, res) => {
+  try {
+    const centers = await Center.find({ status: 'active' }).select('name centerCode _id');
+    console.log(centers);
+    res.json(centers);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   createCenter,
   getCenters,
   updateCenter,
   deleteCenter,
+  getPublicCenters,
 };

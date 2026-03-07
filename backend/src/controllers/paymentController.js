@@ -93,7 +93,22 @@ const getPayments = async (req, res) => {
   }
 };
 
+// @desc    Get my payments
+// @route   GET /api/payments/my-payments
+// @access  Private
+const getMyPayments = async (req, res) => {
+  try {
+    const payments = await Payment.find({ staff: req.user._id })
+      .sort({ paymentDate: -1 });
+    res.json(payments);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   importPayments,
   getPayments,
+  getMyPayments,
 };
