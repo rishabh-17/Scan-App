@@ -51,6 +51,47 @@ const getPayroll = async (req, res) => {
         },
       },
       {
+        $lookup: {
+          from: 'payments',
+          let: { operatorId: '$_id.operatorId' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$staff', '$$operatorId'] },
+                    { $ne: ['$status', 'failed'] },
+                  ],
+                },
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                totalPaid: { $sum: '$amount' },
+              },
+            },
+          ],
+          as: 'payments',
+        },
+      },
+      {
+        $addFields: {
+          totalPaid: { $ifNull: [{ $arrayElemAt: ['$payments.totalPaid', 0] }, 0] },
+          totalAmount: { $multiply: ['$totalScans', '$_id.rate'] },
+        },
+      },
+      {
+        $addFields: {
+          pendingAmount: { $subtract: ['$totalAmount', '$totalPaid'] },
+        },
+      },
+      {
+        $match: {
+          pendingAmount: { $gt: 0 },
+        },
+      },
+      {
         $project: {
           _id: 0,
           operatorId: '$_id.operatorId',
@@ -63,7 +104,9 @@ const getPayroll = async (req, res) => {
           mobile: '$_id.mobile',
           center: '$_id.center',
           totalScans: 1,
-          totalAmount: { $multiply: ['$totalScans', '$_id.rate'] },
+          totalAmount: 1,
+          totalPaid: 1,
+          pendingAmount: 1,
         },
       },
     ]);

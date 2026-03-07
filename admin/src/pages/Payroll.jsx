@@ -36,11 +36,31 @@ const Payroll = () => {
   };
 
   const calculateTotalPayout = () => {
-    return payrollData.reduce((total, item) => total + item.totalAmount, 0);
+    return payrollData.reduce((total, item) => total + (item.pendingAmount || 0), 0);
   };
 
   const calculateTotalPaid = () => {
     return paymentHistory.reduce((total, item) => total + item.amount, 0);
+  };
+
+  const handleCreatePayment = async (operatorId, amount) => {
+    if (!window.confirm(`Are you sure you want to mark ₹${amount.toLocaleString()} as paid?`)) return;
+
+    try {
+      await api.post('/payments', {
+        staff: operatorId,
+        amount: amount,
+        status: 'paid',
+      });
+
+      // Refresh both lists
+      fetchPayroll();
+      fetchPaymentHistory();
+      alert('Payment marked as paid successfully');
+    } catch (error) {
+      console.error('Error creating payment:', error);
+      alert('Failed to mark payment as paid');
+    }
   };
 
   const handleImportClick = () => {
@@ -104,6 +124,21 @@ const Payroll = () => {
     XLSX.writeFile(wb, fileName);
   };
 
+  const handleMarkAsPaid = async (id) => {
+    if (!window.confirm('Are you sure you want to mark this payment as paid?')) return;
+
+    try {
+      await api.put(`/payments/${id}`, { status: 'paid' });
+      // Update local state
+      setPaymentHistory(prev => prev.map(p =>
+        p._id === id ? { ...p, status: 'paid' } : p
+      ));
+    } catch (error) {
+      console.error('Error updating payment status:', error);
+      alert('Failed to update payment status');
+    }
+  };
+
   const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -137,7 +172,7 @@ const Payroll = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 mx-2">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -161,13 +196,13 @@ const Payroll = () => {
           >
             Export to Excel
           </button>
-          <button
+          {/* <button
             onClick={handleImportClick}
             disabled={importing}
             className={`px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition flex items-center gap-2 ${importing ? 'opacity-70 cursor-not-allowed' : ''}`}
           >
             {importing ? 'Importing...' : 'Import Payments (Excel)'}
-          </button>
+          </button> */}
         </div>
       </div>
 
@@ -219,13 +254,14 @@ const Payroll = () => {
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Project</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Total Scans</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Rate</th>
-                      <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Total Amount</th>
+                      <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Pending Amount</th>
+                      <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {payrollData.length === 0 ? (
                       <tr>
-                        <td colSpan="5" className="py-12 text-center text-gray-500">No payroll data available</td>
+                        <td colSpan="6" className="py-12 text-center text-gray-500">No pending payouts available</td>
                       </tr>
                     ) : (
                       payrollData.map((item, index) => (
@@ -238,7 +274,16 @@ const Payroll = () => {
                           <td className="px-6 py-4 text-sm text-gray-600">{item.totalScans}</td>
                           <td className="px-6 py-4 text-sm text-gray-600">₹{item.rate}</td>
                           <td className="px-6 py-4 text-right">
-                            <span className="text-green-600 font-semibold">₹{item.totalAmount.toLocaleString()}</span>
+                            <span className="text-green-600 font-semibold">₹{(item.pendingAmount || 0).toLocaleString()}</span>
+                            <div className="text-xs text-gray-400">Total: ₹{item.totalAmount?.toLocaleString()}</div>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <button
+                              onClick={() => handleCreatePayment(item.operatorId, item.pendingAmount)}
+                              className="text-xs bg-indigo-600 text-white hover:bg-indigo-700 px-3 py-1.5 rounded transition-colors"
+                            >
+                              Mark Paid
+                            </button>
                           </td>
                         </tr>
                       ))
@@ -306,12 +351,23 @@ const Payroll = () => {
                           )}
                         </td>
                         <td className="px-6 py-4">
-                          <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${payment.status === 'processed' ? 'bg-green-50 text-green-700' :
-                            payment.status === 'failed' ? 'bg-red-50 text-red-700' :
-                              'bg-yellow-50 text-yellow-700'
-                            }`}>
-                            {payment.status}
-                          </span>
+                          <div className="flex flex-col items-start gap-2">
+                            <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${payment.status === 'processed' ? 'bg-blue-50 text-blue-700' :
+                              payment.status === 'paid' ? 'bg-green-50 text-green-700' :
+                                payment.status === 'failed' ? 'bg-red-50 text-red-700' :
+                                  'bg-yellow-50 text-yellow-700'
+                              }`}>
+                              {payment.status}
+                            </span>
+                            {payment.status !== 'paid' && payment.status !== 'failed' && (
+                              <button
+                                onClick={() => handleMarkAsPaid(payment._id)}
+                                className="text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-2 py-1 rounded border border-indigo-200 transition-colors"
+                              >
+                                Mark Paid
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))

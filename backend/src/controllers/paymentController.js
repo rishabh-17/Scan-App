@@ -107,8 +107,64 @@ const getMyPayments = async (req, res) => {
   }
 };
 
+// @desc    Update payment status
+// @route   PUT /api/payments/:id
+// @access  Private/Admin
+const updatePaymentStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+    const payment = await Payment.findById(req.params.id);
+
+    if (!payment) {
+      return res.status(404).json({ message: 'Payment not found' });
+    }
+
+    if (!['pending', 'processed', 'failed', 'paid'].includes(status)) {
+      return res.status(400).json({ message: 'Invalid status' });
+    }
+
+    payment.status = status;
+    await payment.save();
+
+    res.json(payment);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Create a payment
+// @route   POST /api/payments
+// @access  Private/Admin
+const createPayment = async (req, res) => {
+  try {
+    const { staff, amount, paymentMode, transactionId, remarks, status } = req.body;
+
+    if (!staff || !amount) {
+      return res.status(400).json({ message: 'Please provide staff and amount' });
+    }
+
+    const payment = await Payment.create({
+      staff,
+      amount,
+      paymentMode: paymentMode || 'bank_transfer',
+      transactionId,
+      remarks,
+      status: status || 'processed',
+      paymentDate: new Date(),
+    });
+
+    res.status(201).json(payment);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   importPayments,
   getPayments,
   getMyPayments,
+  updatePaymentStatus,
+  createPayment,
 };
