@@ -59,7 +59,7 @@ This project consists of three main components:
 1.  Navigate to `admin` folder.
 2.  Run `npm install`.
 3.  Run `npm run dev`.
-    -   URL: http://localhost:5173
+    -   URL: http://3.25.120.212:5173
 
 ### ScanApp
 1.  Navigate to `ScanApp` folder.
