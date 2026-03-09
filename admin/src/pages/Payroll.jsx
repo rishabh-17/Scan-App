@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../services/api';
 import * as XLSX from 'xlsx';
+import Button from '../components/Button';
+import ConfirmModal from '../components/ConfirmModal';
+import AlertModal from '../components/AlertModal';
 
 const Payroll = () => {
   const [activeTab, setActiveTab] = useState('payouts');
@@ -8,6 +11,25 @@ const Payroll = () => {
   const [paymentHistory, setPaymentHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [selectedHistoryIds, setSelectedHistoryIds] = useState(new Set());
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: null,
+    confirmVariant: 'primary'
+  });
+
+  const [alertModal, setAlertModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    variant: 'primary'
+  });
+
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -43,9 +65,8 @@ const Payroll = () => {
     return paymentHistory.reduce((total, item) => total + item.amount, 0);
   };
 
-  const handleCreatePayment = async (operatorId, amount) => {
-    if (!window.confirm(`Are you sure you want to mark ₹${amount.toLocaleString()} as paid?`)) return;
-
+  const executeCreatePayment = async (operatorId, amount) => {
+    setActionLoading(true);
     try {
       await api.post('/payments', {
         staff: operatorId,
@@ -56,11 +77,125 @@ const Payroll = () => {
       // Refresh both lists
       fetchPayroll();
       fetchPaymentHistory();
-      alert('Payment marked as paid successfully');
+      setAlertModal({
+        isOpen: true,
+        title: 'Success',
+        message: 'Payment marked as paid successfully',
+        variant: 'success'
+      });
+      setConfirmModal(prev => ({ ...prev, isOpen: false }));
     } catch (error) {
       console.error('Error creating payment:', error);
-      alert('Failed to mark payment as paid');
+      setAlertModal({
+        isOpen: true,
+        title: 'Error',
+        message: 'Failed to mark payment as paid',
+        variant: 'danger'
+      });
+      setConfirmModal(prev => ({ ...prev, isOpen: false }));
+    } finally {
+      setActionLoading(false);
     }
+  };
+
+  const handleCreatePayment = (operatorId, amount) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Confirm Payment',
+      message: `Are you sure you want to mark ₹${amount.toLocaleString()} as paid?`,
+      onConfirm: () => executeCreatePayment(operatorId, amount),
+      confirmVariant: 'primary'
+    });
+  };
+
+  const executeBulkCreatePayment = async () => {
+    const selectedItems = payrollData.filter(item => selectedIds.has(item.operatorId));
+    setActionLoading(true);
+
+    try {
+      await Promise.all(selectedItems.map(item =>
+        api.post('/payments', {
+          staff: item.operatorId,
+          amount: item.pendingAmount,
+          status: 'paid',
+        })
+      ));
+
+      setSelectedIds(new Set());
+      fetchPayroll();
+      fetchPaymentHistory();
+      setAlertModal({
+        isOpen: true,
+        title: 'Success',
+        message: 'Selected payments marked as paid successfully',
+        variant: 'success'
+      });
+      setConfirmModal(prev => ({ ...prev, isOpen: false }));
+    } catch (error) {
+      console.error('Error creating bulk payments:', error);
+      setAlertModal({
+        isOpen: true,
+        title: 'Error',
+        message: 'Some payments failed to process',
+        variant: 'danger'
+      });
+      fetchPayroll();
+      fetchPaymentHistory();
+      setConfirmModal(prev => ({ ...prev, isOpen: false }));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleBulkCreatePayment = () => {
+    const selectedItems = payrollData.filter(item => selectedIds.has(item.operatorId));
+    if (selectedItems.length === 0) return;
+
+    const totalAmount = selectedItems.reduce((sum, item) => sum + (item.pendingAmount || 0), 0);
+
+    setConfirmModal({
+      isOpen: true,
+      title: 'Confirm Bulk Payment',
+      message: `Mark ${selectedItems.length} operators as paid? Total: ₹${totalAmount.toLocaleString()}`,
+      onConfirm: executeBulkCreatePayment,
+      confirmVariant: 'primary'
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === payrollData.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(payrollData.map(item => item.operatorId)));
+    }
+  };
+
+  const toggleSelect = (id) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const toggleSelectAllHistory = () => {
+    if (selectedHistoryIds.size === paymentHistory.length) {
+      setSelectedHistoryIds(new Set());
+    } else {
+      setSelectedHistoryIds(new Set(paymentHistory.map(item => item._id)));
+    }
+  };
+
+  const toggleSelectHistory = (id) => {
+    const newSelected = new Set(selectedHistoryIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedHistoryIds(newSelected);
   };
 
   const handleImportClick = () => {
@@ -124,19 +259,85 @@ const Payroll = () => {
     XLSX.writeFile(wb, fileName);
   };
 
-  const handleMarkAsPaid = async (id) => {
-    if (!window.confirm('Are you sure you want to mark this payment as paid?')) return;
-
+  const executeMarkAsPaid = async (id) => {
+    setActionLoading(true);
     try {
       await api.put(`/payments/${id}`, { status: 'paid' });
       // Update local state
       setPaymentHistory(prev => prev.map(p =>
         p._id === id ? { ...p, status: 'paid' } : p
       ));
+      setAlertModal({
+        isOpen: true,
+        title: 'Success',
+        message: 'Payment status updated',
+        variant: 'success'
+      });
+      setConfirmModal(prev => ({ ...prev, isOpen: false }));
     } catch (error) {
       console.error('Error updating payment status:', error);
-      alert('Failed to update payment status');
+      setAlertModal({
+        isOpen: true,
+        title: 'Error',
+        message: 'Failed to update payment status',
+        variant: 'danger'
+      });
+      setConfirmModal(prev => ({ ...prev, isOpen: false }));
+    } finally {
+      setActionLoading(false);
     }
+  };
+
+  const handleMarkAsPaid = (id) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Confirm Update',
+      message: 'Are you sure you want to mark this payment as paid?',
+      onConfirm: () => executeMarkAsPaid(id),
+      confirmVariant: 'primary'
+    });
+  };
+
+  const executeBulkMarkHistoryPaid = async () => {
+    const selectedItems = paymentHistory.filter(item => selectedHistoryIds.has(item._id));
+    setActionLoading(true);
+    try {
+      await Promise.all(selectedItems.map(item =>
+        api.put(`/payments/${item._id}`, { status: 'paid' })
+      ));
+
+      setPaymentHistory(prev => prev.map(p => selectedHistoryIds.has(p._id) ? { ...p, status: 'paid' } : p));
+      setSelectedHistoryIds(new Set());
+      setAlertModal({
+        isOpen: true,
+        title: 'Success',
+        message: 'Selected payments marked as paid',
+        variant: 'success'
+      });
+      setConfirmModal(prev => ({ ...prev, isOpen: false }));
+    } catch (error) {
+      console.error('Error bulk updating:', error);
+      setAlertModal({
+        isOpen: true,
+        title: 'Error',
+        message: 'Some updates failed',
+        variant: 'danger'
+      });
+      setConfirmModal(prev => ({ ...prev, isOpen: false }));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleBulkMarkHistoryPaid = () => {
+    if (selectedHistoryIds.size === 0) return;
+    setConfirmModal({
+      isOpen: true,
+      title: 'Confirm Bulk Update',
+      message: `Mark ${selectedHistoryIds.size} payments as paid?`,
+      onConfirm: executeBulkMarkHistoryPaid,
+      confirmVariant: 'primary'
+    });
   };
 
   const handleFileChange = async (e) => {
@@ -159,12 +360,22 @@ const Payroll = () => {
       if (errors.length > 0) {
         message += `\n\nErrors:\n${errors.slice(0, 5).join('\n')}${errors.length > 5 ? '\n...' : ''}`;
       }
-      alert(message);
+      setAlertModal({
+        isOpen: true,
+        title: 'Import Result',
+        message: message,
+        variant: failed > 0 ? 'warning' : 'success'
+      });
 
       fetchPaymentHistory();
     } catch (error) {
       console.error('Import error:', error);
-      alert('Failed to import payments');
+      setAlertModal({
+        isOpen: true,
+        title: 'Import Failed',
+        message: 'Failed to import payments. Please check the file format.',
+        variant: 'danger'
+      });
     } finally {
       setImporting(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -190,19 +401,18 @@ const Payroll = () => {
             accept=".xlsx, .xls"
             className="hidden"
           />
-          <button
+          <Button
             onClick={handleExport}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50"
+            variant="secondary"
           >
             Export to Excel
-          </button>
-          {/* <button
+          </Button>
+          <Button
             onClick={handleImportClick}
-            disabled={importing}
-            className={`px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition flex items-center gap-2 ${importing ? 'opacity-70 cursor-not-allowed' : ''}`}
+            loading={importing}
           >
-            {importing ? 'Importing...' : 'Import Payments (Excel)'}
-          </button> */}
+            Import Payments (Excel)
+          </Button>
         </div>
       </div>
 
@@ -241,6 +451,19 @@ const Payroll = () => {
             </h2>
           </div>
 
+          {/* Bulk Actions */}
+          {selectedIds.size > 0 && (
+            <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg flex items-center justify-between mb-6">
+              <span className="text-blue-700 font-medium">{selectedIds.size} operators selected</span>
+              <Button
+                onClick={handleBulkCreatePayment}
+                loading={actionLoading}
+              >
+                Mark Selected as Paid
+              </Button>
+            </div>
+          )}
+
           {/* Payouts Table */}
           {loading ? (
             <div className="text-gray-500">Loading payroll data...</div>
@@ -250,6 +473,14 @@ const Payroll = () => {
                 <table className="min-w-full">
                   <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
+                      <th className="px-6 py-3 text-left">
+                        <input
+                          type="checkbox"
+                          checked={payrollData.length > 0 && selectedIds.size === payrollData.length}
+                          onChange={toggleSelectAll}
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                      </th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Operator</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Project</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Total Scans</th>
@@ -261,11 +492,19 @@ const Payroll = () => {
                   <tbody className="divide-y divide-gray-100">
                     {payrollData.length === 0 ? (
                       <tr>
-                        <td colSpan="6" className="py-12 text-center text-gray-500">No pending payouts available</td>
+                        <td colSpan="7" className="py-12 text-center text-gray-500">No pending payouts available</td>
                       </tr>
                     ) : (
                       payrollData.map((item, index) => (
-                        <tr key={index} className="hover:bg-gray-50 transition">
+                        <tr key={index} className={`hover:bg-gray-50 transition ${selectedIds.has(item.operatorId) ? 'bg-blue-50' : ''}`}>
+                          <td className="px-6 py-4">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(item.operatorId)}
+                              onChange={() => toggleSelect(item.operatorId)}
+                              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                          </td>
                           <td className="px-6 py-4">
                             <p className="text-sm font-medium text-gray-900">{item.operatorName}</p>
                             <p className="text-xs text-gray-500">{item.operatorId}</p>
@@ -278,12 +517,13 @@ const Payroll = () => {
                             <div className="text-xs text-gray-400">Total: ₹{item.totalAmount?.toLocaleString()}</div>
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <button
+                            <Button
                               onClick={() => handleCreatePayment(item.operatorId, item.pendingAmount)}
-                              className="text-xs bg-indigo-600 text-white hover:bg-indigo-700 px-3 py-1.5 rounded transition-colors"
+                              className="text-xs px-3 py-1.5"
+                              loading={actionLoading}
                             >
                               Mark Paid
-                            </button>
+                            </Button>
                           </td>
                         </tr>
                       ))
@@ -304,12 +544,33 @@ const Payroll = () => {
             </h2>
           </div>
 
+          {/* Bulk Actions for History */}
+          {selectedHistoryIds.size > 0 && (
+            <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg flex items-center justify-between mb-6">
+              <span className="text-blue-700 font-medium">{selectedHistoryIds.size} payments selected</span>
+              <Button
+                onClick={handleBulkMarkHistoryPaid}
+                loading={actionLoading}
+              >
+                Mark Selected as Paid
+              </Button>
+            </div>
+          )}
+
           {/* History Table */}
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="min-w-full">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
+                    <th className="px-6 py-3 text-left">
+                      <input
+                        type="checkbox"
+                        checked={paymentHistory.length > 0 && selectedHistoryIds.size === paymentHistory.length}
+                        onChange={toggleSelectAllHistory}
+                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                    </th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Beneficiary</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Amount</th>
@@ -321,11 +582,19 @@ const Payroll = () => {
                 <tbody className="divide-y divide-gray-100">
                   {paymentHistory.length === 0 ? (
                     <tr>
-                      <td colSpan="6" className="py-12 text-center text-gray-500">No payment history found</td>
+                      <td colSpan="7" className="py-12 text-center text-gray-500">No payment history found</td>
                     </tr>
                   ) : (
                     paymentHistory.map((payment) => (
-                      <tr key={payment._id} className="hover:bg-gray-50 transition">
+                      <tr key={payment._id} className={`hover:bg-gray-50 transition ${selectedHistoryIds.has(payment._id) ? 'bg-blue-50' : ''}`}>
+                        <td className="px-6 py-4">
+                          <input
+                            type="checkbox"
+                            checked={selectedHistoryIds.has(payment._id)}
+                            onChange={() => toggleSelectHistory(payment._id)}
+                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                        </td>
                         <td className="px-6 py-4 text-sm text-gray-600">
                           {new Date(payment.paymentDate).toLocaleDateString()}
                         </td>
@@ -360,12 +629,14 @@ const Payroll = () => {
                               {payment.status}
                             </span>
                             {payment.status !== 'paid' && payment.status !== 'failed' && (
-                              <button
+                              <Button
                                 onClick={() => handleMarkAsPaid(payment._id)}
-                                className="text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-2 py-1 rounded border border-indigo-200 transition-colors"
+                                variant="secondary"
+                                className="text-xs px-2 py-1"
+                                loading={actionLoading}
                               >
                                 Mark Paid
-                              </button>
+                              </Button>
                             )}
                           </div>
                         </td>
@@ -378,6 +649,24 @@ const Payroll = () => {
           </div>
         </>
       )}
+      {/* Modals */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmVariant={confirmModal.confirmVariant}
+        loading={actionLoading}
+      />
+
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        onClose={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+        title={alertModal.title}
+        message={alertModal.message}
+        variant={alertModal.variant}
+      />
     </div>
   );
 };

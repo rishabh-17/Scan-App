@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { getProjects, getCenters, validateBulkUpload, bulkCreateScanEntries, getBulkUploadHistory } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import Button from '../components/Button';
+import ConfirmModal from '../components/ConfirmModal';
+import AlertModal from '../components/AlertModal';
 
 const WorkUpload = () => {
   const { user } = useAuth();
@@ -26,6 +29,22 @@ const WorkUpload = () => {
   const [uploadHistory, setUploadHistory] = useState([]);
 
   const [filteredProjects, setFilteredProjects] = useState([]);
+  const [selectedIndices, setSelectedIndices] = useState(new Set());
+
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: null,
+    confirmVariant: 'primary'
+  });
+
+  const [alertModal, setAlertModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    variant: 'primary'
+  });
 
   useEffect(() => {
     fetchMetadata();
@@ -57,7 +76,7 @@ const WorkUpload = () => {
         });
 
         // Check legacy format: center string matching name
-        const hasCenterName = p.center && selectedCenterName && 
+        const hasCenterName = p.center && selectedCenterName &&
           p.center.toLowerCase() === selectedCenterName.toLowerCase();
 
         return hasCenterId || hasCenterName;
@@ -155,6 +174,8 @@ const WorkUpload = () => {
           }));
 
           setParsedData(formattedRows);
+          // Select all by default
+          setSelectedIndices(new Set(formattedRows.map((_, i) => i)));
         } catch (err) {
           console.error('Error parsing file:', err);
           setError('Failed to parse Excel file');
@@ -194,35 +215,104 @@ const WorkUpload = () => {
     }
   };
 
-  const handleSubmit = async () => {
-    if (!validationResult?.valid) {
-      setError('Please validate successfully before submitting');
-      return;
-    }
+  const executeSubmit = async () => {
+    // Filter rows based on selection
+    const rowsToSubmit = parsedData.filter((_, idx) => selectedIndices.has(idx));
 
     setSubmitting(true);
     setError('');
 
     try {
-      const result = await bulkCreateScanEntries(parsedData);
-      setSuccessMessage(`Successfully created ${result.message}`);
+      const result = await bulkCreateScanEntries(rowsToSubmit);
+      setSuccessMessage(`Successfully created ${result.message || result.count + ' entries'}`);
       setFile(null);
       setParsedData([]);
+      setSelectedIndices(new Set());
       setValidationResult(null);
       fetchHistory(); // Refresh history
+      setConfirmModal(prev => ({ ...prev, isOpen: false }));
     } catch (err) {
       console.error('Submission error:', err);
-      setError('Failed to submit data');
+      setError('Failed to submit data: ' + (err.response?.data?.message || err.message));
+      setConfirmModal(prev => ({ ...prev, isOpen: false }));
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleSubmit = async () => {
+    const rowsToSubmit = parsedData.filter((_, idx) => selectedIndices.has(idx));
+
+    if (rowsToSubmit.length === 0) {
+      setAlertModal({
+        isOpen: true,
+        title: 'Selection Required',
+        message: 'No rows selected for submission',
+        variant: 'danger'
+      });
+      return;
+    }
+
+    // Check if any selected row has validation errors
+    if (validationResult && !validationResult.valid) {
+      const errorRowIndices = new Set(validationResult.errors.map(e => e.row - 1));
+      const hasErrorInSelection = Array.from(selectedIndices).some(idx => errorRowIndices.has(idx));
+
+      if (hasErrorInSelection) {
+        setConfirmModal({
+          isOpen: true,
+          title: 'Validation Errors',
+          message: 'Some selected rows have validation errors. Do you want to proceed anyway?',
+          onConfirm: executeSubmit,
+          confirmVariant: 'danger'
+        });
+        return;
+      }
+    } else if (!validationResult) {
+      // Not validated yet
+      setConfirmModal({
+        isOpen: true,
+        title: 'Unvalidated Data',
+        message: 'You have not validated the data yet. Proceed with submission?',
+        onConfirm: executeSubmit,
+        confirmVariant: 'warning' // or danger
+      });
+      return;
+    }
+
+    // Standard confirmation
+    setConfirmModal({
+      isOpen: true,
+      title: 'Confirm Submission',
+      message: `Are you sure you want to submit ${rowsToSubmit.length} entries?`,
+      onConfirm: executeSubmit,
+      confirmVariant: 'primary'
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIndices.size === parsedData.length) {
+      setSelectedIndices(new Set());
+    } else {
+      setSelectedIndices(new Set(parsedData.map((_, i) => i)));
+    }
+  };
+
+  const toggleSelect = (idx) => {
+    const newSelected = new Set(selectedIndices);
+    if (newSelected.has(idx)) {
+      newSelected.delete(idx);
+    } else {
+      newSelected.add(idx);
+    }
+    setSelectedIndices(newSelected);
   };
 
   return (
     <div className="space-y-6">
       <div className="bg-white shadow rounded-lg p-6">
         <h2 className="text-xl font-semibold text-gray-800 mb-6">Work Upload (Bulk)</h2>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           {/* 1. Center Selection (First Step) */}
           <div>
@@ -294,11 +384,21 @@ const WorkUpload = () => {
 
         {parsedData.length > 0 && (
           <div className="mt-4">
-            <h3 className="text-sm font-medium text-gray-700 mb-2">Preview ({parsedData.length} rows)</h3>
-            <div className="bg-gray-50 p-2 rounded max-h-40 overflow-auto text-xs border border-gray-200">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="text-sm font-medium text-gray-700">Preview ({selectedIndices.size} selected / {parsedData.length} total)</h3>
+            </div>
+            <div className="bg-gray-50 p-2 rounded max-h-96 overflow-auto text-xs border border-gray-200">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-100 sticky top-0">
                   <tr>
+                    <th className="px-2 py-1 text-left">
+                      <input
+                        type="checkbox"
+                        checked={parsedData.length > 0 && selectedIndices.size === parsedData.length}
+                        onChange={toggleSelectAll}
+                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                    </th>
                     <th className="px-2 py-1 text-left">Row</th>
                     <th className="px-2 py-1 text-left">Staff ID</th>
                     <th className="px-2 py-1 text-left">Activity</th>
@@ -308,8 +408,16 @@ const WorkUpload = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {parsedData.slice(0, 10).map((row, idx) => (
-                    <tr key={idx}>
+                  {parsedData.slice(0, 100).map((row, idx) => (
+                    <tr key={idx} className={selectedIndices.has(idx) ? 'bg-blue-50' : ''}>
+                      <td className="px-2 py-1">
+                        <input
+                          type="checkbox"
+                          checked={selectedIndices.has(idx)}
+                          onChange={() => toggleSelect(idx)}
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                      </td>
                       <td className="px-2 py-1">{idx + 1}</td>
                       <td className="px-2 py-1">{row.staffId}</td>
                       <td className="px-2 py-1">{row.activityType}</td>
@@ -318,9 +426,9 @@ const WorkUpload = () => {
                       <td className="px-2 py-1">{row.centerCode}</td>
                     </tr>
                   ))}
-                  {parsedData.length > 10 && (
+                  {parsedData.length > 100 && (
                     <tr>
-                      <td colSpan="6" className="px-2 py-1 text-center text-gray-500">...and {parsedData.length - 10} more rows</td>
+                      <td colSpan="7" className="px-2 py-1 text-center text-gray-500">...and {parsedData.length - 100} more rows</td>
                     </tr>
                   )}
                 </tbody>
@@ -343,23 +451,22 @@ const WorkUpload = () => {
         )}
 
         <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
-          <button
+          <Button
             onClick={handleValidate}
-            disabled={!file || parsedData.length === 0 || loading}
-            className={`px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white 
-              ${!file || parsedData.length === 0 || loading ? 'bg-indigo-300 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+            disabled={!file || parsedData.length === 0}
+            loading={loading}
           >
-            {loading ? 'Validating...' : 'Validate'}
-          </button>
+            Validate
+          </Button>
 
-          <button
+          <Button
             onClick={handleSubmit}
-            disabled={!validationResult?.valid || submitting}
-            className={`px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white 
-              ${!validationResult?.valid || submitting ? 'bg-green-300 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'}`}
+            disabled={parsedData.length === 0 || selectedIndices.size === 0}
+            loading={submitting}
+            variant="success"
           >
-            {submitting ? 'Submitting...' : 'Submit for Approval'}
-          </button>
+            {`Submit ${selectedIndices.size} Entries`}
+          </Button>
         </div>
       </div>
 
@@ -405,7 +512,7 @@ const WorkUpload = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                        ${entry.status === 'approved' ? 'bg-green-100 text-green-800' : 
+                        ${entry.status === 'approved' ? 'bg-green-100 text-green-800' :
                           entry.status === 'rejected' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>
                         {entry.status}
                       </span>
@@ -417,6 +524,24 @@ const WorkUpload = () => {
           </div>
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmVariant={confirmModal.confirmVariant}
+        loading={submitting}
+      />
+
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        onClose={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+        title={alertModal.title}
+        message={alertModal.message}
+        variant={alertModal.variant}
+      />
     </div>
   );
 };

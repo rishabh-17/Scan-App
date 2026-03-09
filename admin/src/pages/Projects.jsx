@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import Select from 'react-select';
 import { getProjects, createProject, updateProject, deleteProject, getCenters, getUsers } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import Button from '../components/Button';
+import ConfirmModal from '../components/ConfirmModal';
+import AlertModal from '../components/AlertModal';
 
 const Projects = () => {
   const { user: currentUser } = useAuth();
@@ -9,8 +12,21 @@ const Projects = () => {
   const [centers, setCenters] = useState([]);
   const [managers, setManagers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: null
+  });
+  const [alertModal, setAlertModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    variant: 'info'
+  });
   const [formData, setFormData] = useState({
     name: '',
     clientName: '',
@@ -90,15 +106,24 @@ const Projects = () => {
     setFormData({ ...formData, managers: selectedOptions ? selectedOptions.map(option => option.value) : [] });
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
 
     if (rateChartItem.activityName || rateChartItem.rate) {
-      if (!window.confirm('You have entered data in the Rate Chart fields but haven\'t clicked "Add". Do you want to proceed without adding this item?')) {
-        return;
-      }
+      setConfirmModal({
+        isOpen: true,
+        title: 'Unsaved Rate Chart Item',
+        message: 'You have entered data in the Rate Chart fields but haven\'t clicked "Add". Do you want to proceed without adding this item?',
+        onConfirm: () => submitProject()
+      });
+    } else {
+      submitProject();
     }
+  };
 
+  const submitProject = async () => {
+    setActionLoading(true);
+    setConfirmModal(prev => ({ ...prev, isOpen: false }));
     try {
       // Convert center to centers array for backend
       const projectData = {
@@ -119,9 +144,22 @@ const Projects = () => {
       // Refresh projects
       const projectsData = await getProjects();
       setProjects(projectsData);
+      setAlertModal({
+        isOpen: true,
+        title: 'Success',
+        message: editingProject ? 'Project updated successfully' : 'Project created successfully',
+        variant: 'success'
+      });
     } catch (error) {
       console.error('Error saving project:', error);
-      alert('Error saving project');
+      setAlertModal({
+        isOpen: true,
+        title: 'Error',
+        message: 'Error saving project',
+        variant: 'danger'
+      });
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -142,15 +180,38 @@ const Projects = () => {
     setShowModal(true);
   };
 
+  const handleDeleteClick = (id) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Project',
+      message: 'Are you sure you want to delete this project?',
+      onConfirm: () => handleDelete(id)
+    });
+  };
+
   const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this project?')) {
-      try {
-        await deleteProject(id);
-        const projectsData = await getProjects();
-        setProjects(projectsData);
-      } catch (error) {
-        console.error('Error deleting project:', error);
-      }
+    setActionLoading(true);
+    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+    try {
+      await deleteProject(id);
+      const projectsData = await getProjects();
+      setProjects(projectsData);
+      setAlertModal({
+        isOpen: true,
+        title: 'Success',
+        message: 'Project deleted successfully',
+        variant: 'success'
+      });
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      setAlertModal({
+        isOpen: true,
+        title: 'Error',
+        message: 'Error deleting project',
+        variant: 'danger'
+      });
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -200,6 +261,7 @@ const Projects = () => {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Project Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Project Code</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Center</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Managers</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Activities</th>
@@ -210,6 +272,7 @@ const Projects = () => {
                 {projects.map((project) => (
                   <tr key={project._id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{project.name}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{project.projectCode || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {project.centers && project.centers.length > 0
                         ? project.centers.map(c => c.name).join(', ')
@@ -251,7 +314,7 @@ const Projects = () => {
                             Edit
                           </button>
                           <button
-                            onClick={() => handleDelete(project._id)}
+                            onClick={() => handleDeleteClick(project._id)}
                             className="text-red-600 hover:text-red-900"
                           >
                             Delete
@@ -442,20 +505,38 @@ const Projects = () => {
                 type="button"
                 onClick={() => setShowModal(false)}
                 className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                disabled={actionLoading}
               >
                 Cancel
               </button>
-              <button
+              <Button
                 type="submit"
                 form="project-form"
+                isLoading={actionLoading}
                 className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
               >
                 {editingProject ? 'Update Project' : 'Create Project'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+      />
+
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        onClose={() => setAlertModal({ ...alertModal, isOpen: false })}
+        title={alertModal.title}
+        message={alertModal.message}
+        variant={alertModal.variant}
+      />
     </div>
   );
 };

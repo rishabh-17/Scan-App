@@ -387,6 +387,26 @@ const getStats = async (req, res) => {
       }
     }
 
+    // Determine pending condition based on role
+    let pendingCondition = [
+      { $ne: ["$status", "finance_approved"] },
+      { $ne: ["$status", "rejected"] }
+    ];
+
+    if (['center_supervisor', 'project_manager'].includes(req.user.role)) {
+      const approvableStatuses = getApprovableStatuses(req.user.role);
+      if (approvableStatuses.length > 0) {
+        pendingCondition = [
+          { $in: ["$status", approvableStatuses] }
+        ];
+      } else {
+        // If no approvable statuses, pending count is 0
+        pendingCondition = [
+          { $eq: ["$status", "___IMPOSSIBLE_STATUS___"] }
+        ];
+      }
+    }
+
     const stats = await ScanEntry.aggregate([
       { $match: query },
       {
@@ -397,10 +417,7 @@ const getStats = async (req, res) => {
           pendingCount: {
             $sum: {
               $cond: [{
-                $and: [
-                  { $ne: ["$status", "finance_approved"] },
-                  { $ne: ["$status", "rejected"] }
-                ]
+                $and: pendingCondition
               }, 1, 0]
             }
           },
@@ -461,7 +478,10 @@ const validateBulkUpload = async (req, res) => {
       rowErrors.push(`Project Code '${projectCode}' not found`);
     } else if (req.user.role === 'project_manager') {
       // RBAC: Check if Project Manager is assigned to this project
-      if (!req.user.project || !req.user.project.equals(project._id)) {
+      const isAssigned = (req.user.project && req.user.project.equals(project._id)) ||
+        (project.managers && project.managers.some(m => m.equals(req.user._id)));
+
+      if (!isAssigned) {
         rowErrors.push(`You are not assigned to project '${projectCode}'`);
       }
     }
@@ -476,7 +496,11 @@ const validateBulkUpload = async (req, res) => {
       rowErrors.push(`Center Code '${centerCode}' not found`);
     } else if (req.user.role === 'center_supervisor') {
       // RBAC: Check if Center Supervisor is assigned to this center
-      if (!req.user.center || !req.user.center.equals(center._id)) {
+      // Check legacy assignment (user.center) OR new assignment (center.supervisors)
+      const isAssigned = (req.user.center && req.user.center.equals(center._id)) ||
+        (center.supervisors && center.supervisors.some(s => s.equals(req.user._id)));
+
+      if (!isAssigned) {
         rowErrors.push(`You are not assigned to center '${centerCode}'`);
       }
     }
@@ -577,12 +601,16 @@ const bulkCreateScanEntries = async (req, res) => {
 
       // RBAC Check
       if (req.user.role === 'center_supervisor') {
-        if (!req.user.center || !req.user.center.equals(center._id)) {
+        const isAssigned = (req.user.center && req.user.center.equals(center._id)) ||
+          (center.supervisors && center.supervisors.some(s => s.equals(req.user._id)));
+        if (!isAssigned) {
           continue;
         }
       }
       if (req.user.role === 'project_manager') {
-        if (!req.user.project || !req.user.project.equals(project._id)) {
+        const isAssigned = (req.user.project && req.user.project.equals(project._id)) ||
+          (project.managers && project.managers.some(m => m.equals(req.user._id)));
+        if (!isAssigned) {
           continue;
         }
       }

@@ -147,9 +147,18 @@ const loginStaff = async (req, res) => {
       _id: staff.id,
       name: staff.name,
       mobile: staff.mobile,
+      email: staff.email,
+      dob: staff.dob,
       role: staff.role,
       center: staff.center,
       project: staff.project,
+      address: staff.address,
+      city: staff.city,
+      state: staff.state,
+      pincode: staff.pincode,
+      aadhaarNumber: staff.aadhaarNumber,
+      panNumber: staff.panNumber,
+      bankDetails: staff.bankDetails,
       token: generateToken(staff._id),
     });
   } else {

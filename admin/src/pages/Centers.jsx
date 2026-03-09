@@ -2,14 +2,30 @@ import React, { useState, useEffect } from 'react';
 import Select from 'react-select';
 import { getCenters, createCenter, updateCenter, deleteCenter, getUsers } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import Button from '../components/Button';
+import ConfirmModal from '../components/ConfirmModal';
+import AlertModal from '../components/AlertModal';
 
 const Centers = () => {
   const { user: currentUser } = useAuth();
   const [centers, setCenters] = useState([]);
   const [supervisors, setSupervisors] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingCenter, setEditingCenter] = useState(null);
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: null
+  });
+  const [alertModal, setAlertModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    variant: 'info'
+  });
   const [formData, setFormData] = useState({
     name: '',
     centerCode: '',
@@ -50,6 +66,7 @@ const Centers = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setActionLoading(true);
     try {
       if (editingCenter) {
         await updateCenter(editingCenter._id, formData);
@@ -63,9 +80,22 @@ const Centers = () => {
       // Refresh centers
       const centersData = await getCenters();
       setCenters(centersData);
+      setAlertModal({
+        isOpen: true,
+        title: 'Success',
+        message: editingCenter ? 'Center updated successfully' : 'Center created successfully',
+        variant: 'success'
+      });
     } catch (error) {
       console.error('Error saving center:', error);
-      alert('Error saving center');
+      setAlertModal({
+        isOpen: true,
+        title: 'Error',
+        message: 'Error saving center',
+        variant: 'danger'
+      });
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -83,15 +113,38 @@ const Centers = () => {
     setShowModal(true);
   };
 
+  const handleDeleteClick = (id) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Center',
+      message: 'Are you sure you want to delete this center?',
+      onConfirm: () => handleDelete(id)
+    });
+  };
+
   const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this center?')) {
-      try {
-        await deleteCenter(id);
-        const centersData = await getCenters();
-        setCenters(centersData);
-      } catch (error) {
-        console.error('Error deleting center:', error);
-      }
+    setActionLoading(true);
+    try {
+      await deleteCenter(id);
+      const centersData = await getCenters();
+      setCenters(centersData);
+      setAlertModal({
+        isOpen: true,
+        title: 'Success',
+        message: 'Center deleted successfully',
+        variant: 'success'
+      });
+    } catch (error) {
+      console.error('Error deleting center:', error);
+      setAlertModal({
+        isOpen: true,
+        title: 'Error',
+        message: 'Error deleting center',
+        variant: 'danger'
+      });
+    } finally {
+      setActionLoading(false);
+      setConfirmModal(prev => ({ ...prev, isOpen: false }));
     }
   };
 
@@ -130,6 +183,7 @@ const Centers = () => {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Center Code</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Supervisors</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -139,6 +193,7 @@ const Centers = () => {
                 {centers.map((center) => (
                   <tr key={center._id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{center.name}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{center.centerCode || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{center.location || '-'}</td>
                     <td className="px-6 py-4 text-sm text-gray-500">
                       {center.supervisors && center.supervisors.length > 0 ? (
@@ -163,7 +218,7 @@ const Centers = () => {
                             Edit
                           </button>
                           <button
-                            onClick={() => handleDelete(center._id)}
+                            onClick={() => handleDeleteClick(center._id)}
                             className="text-red-600 hover:text-red-900"
                           >
                             Delete
@@ -292,20 +347,38 @@ const Centers = () => {
                   type="button"
                   onClick={() => setShowModal(false)}
                   className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  disabled={actionLoading}
                 >
                   Cancel
                 </button>
-                <button
+                <Button
                   type="submit"
+                  isLoading={actionLoading}
                   className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                 >
                   {editingCenter ? 'Update Center' : 'Create Center'}
-                </button>
+                </Button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+      />
+
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        onClose={() => setAlertModal({ ...alertModal, isOpen: false })}
+        title={alertModal.title}
+        message={alertModal.message}
+        variant={alertModal.variant}
+      />
     </div>
   );
 };

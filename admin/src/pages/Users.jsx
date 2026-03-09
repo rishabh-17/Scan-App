@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { getUsers, createUser, updateUser, deleteUser, getCenters, getProjects } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import Button from '../components/Button';
+import ConfirmModal from '../components/ConfirmModal';
+import AlertModal from '../components/AlertModal';
 
 const Users = () => {
   const { user: currentUser } = useAuth();
@@ -8,8 +11,21 @@ const Users = () => {
   const [centers, setCenters] = useState([]);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: null
+  });
+  const [alertModal, setAlertModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    variant: 'info'
+  });
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -48,6 +64,7 @@ const Users = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setActionLoading(true);
     try {
       if (editingUser) {
         // Update logic (password optional if empty)
@@ -61,9 +78,22 @@ const Users = () => {
       setEditingUser(null);
       setFormData({ name: '', email: '', mobile: '', password: '', role: 'center_supervisor', center: '', project: '', status: 'active' });
       fetchData();
+      setAlertModal({
+        isOpen: true,
+        title: 'Success',
+        message: editingUser ? 'User updated successfully' : 'User created successfully',
+        variant: 'success'
+      });
     } catch (error) {
       console.error('Error saving user:', error);
-      alert('Error saving user');
+      setAlertModal({
+        isOpen: true,
+        title: 'Error',
+        message: 'Error saving user',
+        variant: 'danger'
+      });
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -82,14 +112,37 @@ const Users = () => {
     setShowModal(true);
   };
 
+  const handleDeleteClick = (id) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete User',
+      message: 'Are you sure you want to delete this user?',
+      onConfirm: () => handleDelete(id)
+    });
+  };
+
   const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this user?')) {
-      try {
-        await deleteUser(id);
-        fetchUsers();
-      } catch (error) {
-        console.error('Error deleting user:', error);
-      }
+    setActionLoading(true);
+    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+    try {
+      await deleteUser(id);
+      fetchData();
+      setAlertModal({
+        isOpen: true,
+        title: 'Success',
+        message: 'User deleted successfully',
+        variant: 'success'
+      });
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      setAlertModal({
+        isOpen: true,
+        title: 'Error',
+        message: 'Error deleting user',
+        variant: 'danger'
+      });
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -164,7 +217,7 @@ const Users = () => {
                             Edit
                           </button>
                           <button
-                            onClick={() => handleDelete(user._id)}
+                            onClick={() => handleDeleteClick(user._id)}
                             className="text-red-600 hover:text-red-900"
                           >
                             Delete
@@ -296,20 +349,38 @@ const Users = () => {
                   type="button"
                   onClick={() => setShowModal(false)}
                   className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  disabled={actionLoading}
                 >
                   Cancel
                 </button>
-                <button
+                <Button
                   type="submit"
+                  isLoading={actionLoading}
                   className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                 >
                   {editingUser ? 'Update User' : 'Create User'}
-                </button>
+                </Button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+      />
+
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        onClose={() => setAlertModal({ ...alertModal, isOpen: false })}
+        title={alertModal.title}
+        message={alertModal.message}
+        variant={alertModal.variant}
+      />
     </div>
   );
 };

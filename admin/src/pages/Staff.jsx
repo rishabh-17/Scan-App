@@ -9,6 +9,9 @@ import {
   getCenters,
   getProjects
 } from '../services/api';
+import Button from '../components/Button';
+import ConfirmModal from '../components/ConfirmModal';
+import AlertModal from '../components/AlertModal';
 
 const Staff = () => {
   const { user: currentUser } = useAuth();
@@ -17,8 +20,21 @@ const Staff = () => {
   const [centers, setCenters] = useState([]);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: null
+  });
+  const [alertModal, setAlertModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    variant: 'info'
+  });
 
   const initialFormState = {
     name: '',
@@ -144,10 +160,16 @@ const Staff = () => {
 
     // Validation
     if (formData.bankDetails.accountNo !== formData.bankDetails.confirmAccountNo) {
-      alert("Bank Account Numbers do not match!");
+      setAlertModal({
+        isOpen: true,
+        title: 'Validation Error',
+        message: "Bank Account Numbers do not match!",
+        variant: 'warning'
+      });
       return;
     }
 
+    setActionLoading(true);
     try {
       const data = new FormData();
 
@@ -172,20 +194,56 @@ const Staff = () => {
 
       setShowModal(false);
       fetchData(); // Refresh list
+      setAlertModal({
+        isOpen: true,
+        title: 'Success',
+        message: isEditing ? 'Staff updated successfully' : 'Staff created successfully',
+        variant: 'success'
+      });
     } catch (error) {
       console.error('Error saving staff:', error);
-      alert(error.response?.data?.message || 'Error saving staff');
+      setAlertModal({
+        isOpen: true,
+        title: 'Error',
+        message: error.response?.data?.message || 'Error saving staff',
+        variant: 'danger'
+      });
+    } finally {
+      setActionLoading(false);
     }
   };
 
+  const handleDeleteClick = (id) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Staff',
+      message: 'Are you sure you want to delete this staff member?',
+      onConfirm: () => handleDelete(id)
+    });
+  };
+
   const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this staff member?')) {
-      try {
-        await deleteUser(id);
-        fetchData();
-      } catch (error) {
-        console.error('Error deleting staff:', error);
-      }
+    setActionLoading(true);
+    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+    try {
+      await deleteUser(id);
+      fetchData();
+      setAlertModal({
+        isOpen: true,
+        title: 'Success',
+        message: 'Staff deleted successfully',
+        variant: 'success'
+      });
+    } catch (error) {
+      console.error('Error deleting staff:', error);
+      setAlertModal({
+        isOpen: true,
+        title: 'Error',
+        message: 'Error deleting staff',
+        variant: 'danger'
+      });
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -303,7 +361,7 @@ const Staff = () => {
                       )}
                       {currentUser?.role === 'admin' && (
                         <button
-                          onClick={() => handleDelete(staff._id)}
+                          onClick={() => handleDeleteClick(staff._id)}
                           className="text-red-600 hover:text-red-800 text-sm font-medium"
                         >
                           Delete
@@ -632,21 +690,39 @@ const Staff = () => {
                   type="button"
                   onClick={() => setShowModal(false)}
                   className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+                  disabled={actionLoading}
                 >
                   Cancel
                 </button>
 
-                <button
+                <Button
                   type="submit"
+                  isLoading={actionLoading}
                   className="px-6 py-2 text-sm text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 font-medium"
                 >
                   {isEditing ? 'Save Changes' : 'Create Staff'}
-                </button>
+                </Button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+      />
+
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        onClose={() => setAlertModal({ ...alertModal, isOpen: false })}
+        title={alertModal.title}
+        message={alertModal.message}
+        variant={alertModal.variant}
+      />
     </div>
   );
 }
