@@ -1,6 +1,7 @@
 const Staff = require('../models/Staff');
 const Payment = require('../models/Payment');
 const xlsx = require('xlsx');
+const mongoose = require('mongoose');
 
 // @desc    Import payments from Excel
 // @route   POST /api/payments/import
@@ -83,9 +84,42 @@ const importPayments = async (req, res) => {
 // @access  Private/Admin
 const getPayments = async (req, res) => {
   try {
-    const payments = await Payment.find({})
-      .populate('staff', 'name mobile center project')
-      .sort({ paymentDate: -1 });
+    const { center, project } = req.query;
+
+    // If no filters, default to existing populate approach
+    if (!center && !project) {
+      const payments = await Payment.find({})
+        .populate('staff', 'name mobile center project')
+        .sort({ paymentDate: -1 });
+      return res.json(payments);
+    }
+
+    const pipeline = [
+      {
+        $lookup: {
+          from: 'staffs',
+          localField: 'staff',
+          foreignField: '_id',
+          as: 'staff',
+        },
+      },
+      { $unwind: '$staff' },
+    ];
+
+    const match = {};
+    if (center && mongoose.Types.ObjectId.isValid(center)) {
+      match['staff.center'] = new mongoose.Types.ObjectId(center);
+    }
+    if (project && mongoose.Types.ObjectId.isValid(project)) {
+      match['staff.project'] = new mongoose.Types.ObjectId(project);
+    }
+    if (Object.keys(match).length > 0) {
+      pipeline.push({ $match: match });
+    }
+
+    pipeline.push({ $sort: { paymentDate: -1 } });
+
+    const payments = await Payment.aggregate(pipeline);
     res.json(payments);
   } catch (error) {
     console.error(error);

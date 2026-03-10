@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import Button from '../components/Button';
 import ConfirmModal from '../components/ConfirmModal';
 import AlertModal from '../components/AlertModal';
+import { getCenters, getProjects } from '../services/api';
 
 const Payroll = () => {
   const [activeTab, setActiveTab] = useState('payouts');
@@ -14,6 +15,10 @@ const Payroll = () => {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [selectedHistoryIds, setSelectedHistoryIds] = useState(new Set());
   const [actionLoading, setActionLoading] = useState(false);
+  const [centers, setCenters] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [selectedCenter, setSelectedCenter] = useState('');
+  const [selectedProject, setSelectedProject] = useState('');
 
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
@@ -33,13 +38,35 @@ const Payroll = () => {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
+    fetchCentersAndProjects();
+  }, []);
+
+  useEffect(() => {
     fetchPayroll();
     fetchPaymentHistory();
   }, []);
 
+  const handleSearch = async () => {
+    setLoading(true);
+    await Promise.all([fetchPayroll(), fetchPaymentHistory()]);
+  };
+
+  const fetchCentersAndProjects = async () => {
+    try {
+      const [centersData, projectsData] = await Promise.all([getCenters(), getProjects()]);
+      setCenters(centersData);
+      setProjects(projectsData);
+    } catch (error) {
+      console.error('Error fetching filters:', error);
+    }
+  };
+
   const fetchPayroll = async () => {
     try {
-      const response = await api.get('/payroll');
+      const params = {};
+      if (selectedCenter) params.center = selectedCenter;
+      if (selectedProject) params.project = selectedProject;
+      const response = await api.get('/payroll', { params });
       setPayrollData(response.data);
       setLoading(false);
     } catch (error) {
@@ -50,7 +77,10 @@ const Payroll = () => {
 
   const fetchPaymentHistory = async () => {
     try {
-      const response = await api.get('/payments');
+      const params = {};
+      if (selectedCenter) params.center = selectedCenter;
+      if (selectedProject) params.project = selectedProject;
+      const response = await api.get('/payments', { params });
       setPaymentHistory(response.data);
     } catch (error) {
       console.error('Error fetching payment history:', error);
@@ -393,7 +423,42 @@ const Payroll = () => {
           </p>
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex gap-3 items-center">
+          <div className="flex gap-2">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Filter by Center</label>
+              <select
+                value={selectedCenter}
+                onChange={(e) => setSelectedCenter(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              >
+                <option value="">All Centers</option>
+                {centers.map(c => (
+                  <option key={c._id} value={c._id}>
+                    {c.name} ({c.centerCode})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Filter by Project</label>
+              <select
+                value={selectedProject}
+                onChange={(e) => setSelectedProject(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              >
+                <option value="">All Projects</option>
+                {projects.map(p => (
+                  <option key={p._id} value={p._id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <Button onClick={handleSearch}>
+            Search
+          </Button>
           <input
             type="file"
             ref={fileInputRef}
@@ -407,12 +472,12 @@ const Payroll = () => {
           >
             Export to Excel
           </Button>
-          <Button
+          {/* <Button
             onClick={handleImportClick}
             loading={importing}
           >
             Import Payments (Excel)
-          </Button>
+          </Button> */}
         </div>
       </div>
 
