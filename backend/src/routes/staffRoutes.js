@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getAllStaff, getStaffById, updateStaff, deleteStaff, createStaff } = require('../controllers/staffController');
+const { getAllStaff, getStaffById, updateStaff, deleteStaff, createStaff, resetPassword } = require('../controllers/staffController');
 const { protect, admin, finance, staffManager, staffViewer } = require('../middleware/authMiddleware');
 const upload = require('../middleware/uploadMiddleware');
 
@@ -13,6 +13,10 @@ const cpUpload = upload.fields([
 router.route('/')
   .get(protect, staffViewer, getAllStaff)
   .post(protect, staffManager, cpUpload, createStaff);
+
+router.route('/:id/reset-password')
+  .put(protect, admin, resetPassword);
+
 router.route('/:id')
   .get(protect, staffViewer, getStaffById)
   .put(protect, staffManager, cpUpload, updateStaff)

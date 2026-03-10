@@ -33,7 +33,7 @@ const Projects = () => {
     projectCode: '',
     startDate: '',
     endDate: '',
-    center: '',
+    centers: [],
     managers: [], // Array of user IDs
     scanRate: '',
     productivityLimit: '',
@@ -105,6 +105,9 @@ const Projects = () => {
   const handleManagerChange = (selectedOptions) => {
     setFormData({ ...formData, managers: selectedOptions ? selectedOptions.map(option => option.value) : [] });
   };
+  const handleCentersChange = (selectedOptions) => {
+    setFormData({ ...formData, centers: selectedOptions ? selectedOptions.map(option => option.value) : [] });
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -125,10 +128,9 @@ const Projects = () => {
     setActionLoading(true);
     setConfirmModal(prev => ({ ...prev, isOpen: false }));
     try {
-      // Convert center to centers array for backend
       const projectData = {
         ...formData,
-        centers: formData.center ? [formData.center] : []
+        centers: formData.centers || []
       };
 
       if (editingProject) {
@@ -138,7 +140,7 @@ const Projects = () => {
       }
       setShowModal(false);
       setEditingProject(null);
-      setFormData({ name: '', clientName: '', projectCode: '', startDate: '', endDate: '', center: '', managers: [], scanRate: '', productivityLimit: '', rateChart: [] });
+      setFormData({ name: '', clientName: '', projectCode: '', startDate: '', endDate: '', centers: [], managers: [], scanRate: '', productivityLimit: '', rateChart: [] });
       setRateChartItem({ activityName: '', rate: '' });
 
       // Refresh projects
@@ -171,7 +173,7 @@ const Projects = () => {
       projectCode: project.projectCode || '',
       startDate: project.startDate ? project.startDate.split('T')[0] : '',
       endDate: project.endDate ? project.endDate.split('T')[0] : '',
-      center: project.centers && project.centers.length > 0 ? project.centers[0]._id : '',
+      centers: project.centers ? project.centers.map(c => (typeof c === 'object' ? c._id : c)) : [],
       managers: project.managers ? project.managers.map(m => m._id) : [],
       scanRate: project.scanRate,
       productivityLimit: project.productivityLimit || '',
@@ -406,21 +408,20 @@ const Projects = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Center</label>
-                  <select
-                    name="center"
-                    required
-                    value={formData.center}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                  >
-                    <option value="">Select Center</option>
-                    {centers.map(center => (
-                      <option key={center._id} value={center._id}>
-                        {center.name} ({center.centerCode})
-                      </option>
-                    ))}
-                  </select>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Centers</label>
+                  <Select
+                    isMulti
+                    name="centers"
+                    options={centers.map(center => ({ value: center._id, label: `${center.name} (${center.centerCode})` }))}
+                    value={centers
+                      .filter(center => formData.centers.includes(center._id))
+                      .map(center => ({ value: center._id, label: `${center.name} (${center.centerCode})` }))
+                    }
+                    onChange={handleCentersChange}
+                    className="basic-multi-select"
+                    classNamePrefix="select"
+                    placeholder="Select centers..."
+                  />
                   {centers.length === 0 && (
                     <p className="text-xs text-red-500 mt-1">
                       No centers found. Create them in Center Management first.

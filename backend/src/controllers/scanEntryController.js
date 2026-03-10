@@ -296,7 +296,7 @@ const getPendingEntries = async (req, res) => {
 
     const entries = await ScanEntry.find(query)
       .populate('operatorId', 'name mobile')
-      .populate('projectId', 'name center')
+      .populate('projectId', 'name centers')
       .sort({ date: -1 })
       .lean();
 

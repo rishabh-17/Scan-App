@@ -7,7 +7,8 @@ import {
   updateUser,
   deleteUser,
   getCenters,
-  getProjects
+  getProjects,
+  resetUserPassword
 } from '../services/api';
 import Button from '../components/Button';
 import ConfirmModal from '../components/ConfirmModal';
@@ -35,6 +36,38 @@ const Staff = () => {
     message: '',
     variant: 'info'
   });
+
+  const [passwordModal, setPasswordModal] = useState({
+    isOpen: false,
+    staffId: null,
+    staffName: '',
+    newPassword: ''
+  });
+
+  const handlePasswordReset = async () => {
+    if (!passwordModal.newPassword) return;
+
+    setActionLoading(true);
+    try {
+      await resetUserPassword(passwordModal.staffId, passwordModal.newPassword);
+      setAlertModal({
+        isOpen: true,
+        title: 'Success',
+        message: 'Password updated successfully',
+        variant: 'success'
+      });
+      setPasswordModal({ isOpen: false, staffId: null, staffName: '', newPassword: '' });
+    } catch (error) {
+      setAlertModal({
+        isOpen: true,
+        title: 'Error',
+        message: error.response?.data?.message || 'Failed to update password',
+        variant: 'danger'
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   const initialFormState = {
     name: '',
@@ -354,11 +387,26 @@ const Staff = () => {
                       {(currentUser?.role === 'admin' || currentUser?.role === 'center_supervisor') && (
                         <button
                           onClick={() => handleEditClick(staff)}
-                          className="text-indigo-600 hover:text-indigo-800 text-sm font-medium"
+                          className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
                         >
                           Edit
                         </button>
                       )}
+
+                      {currentUser?.role === 'admin' && (
+                        <button
+                          onClick={() => setPasswordModal({
+                            isOpen: true,
+                            staffId: staff._id,
+                            staffName: staff.name,
+                            newPassword: ''
+                          })}
+                          className="text-amber-600 hover:text-amber-900 text-sm font-medium"
+                        >
+                          Reset Pass
+                        </button>
+                      )}
+
                       {currentUser?.role === 'admin' && (
                         <button
                           onClick={() => handleDeleteClick(staff._id)}
@@ -723,6 +771,41 @@ const Staff = () => {
         message={alertModal.message}
         variant={alertModal.variant}
       />
+
+      {passwordModal.isOpen && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+          <div className="relative bg-white rounded-xl shadow-lg max-w-md w-full mx-4 p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Reset Password for {passwordModal.staffName}</h3>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+              <input
+                type="text"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                value={passwordModal.newPassword}
+                onChange={(e) => setPasswordModal({...passwordModal, newPassword: e.target.value})}
+                placeholder="Enter new password"
+              />
+            </div>
+            
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => setPasswordModal({ isOpen: false, staffId: null, staffName: '', newPassword: '' })}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePasswordReset}
+                disabled={actionLoading || !passwordModal.newPassword}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {actionLoading ? 'Updating...' : 'Update Password'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

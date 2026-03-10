@@ -94,6 +94,11 @@ export const deleteUser = async (id) => {
   return response.data;
 };
 
+export const resetUserPassword = async (id, password) => {
+  const response = await api.put(`/staff/${id}/reset-password`, { password });
+  return response.data;
+};
+
 // --- Project Management ---
 export const getProjects = async () => {
   const response = await api.get('/projects');

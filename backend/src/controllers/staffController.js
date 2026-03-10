@@ -125,7 +125,8 @@ const updateStaff = async (req, res) => {
                 staff.bankDetails.cancelledChequeDoc = req.files['cancelledChequeDoc'][0].path;
             }
 
-            if (req.body.password) {
+            // Password update only by admin (or via reset password flow)
+            if (req.body.password && req.user.role === 'admin') {
                 const salt = await bcrypt.genSalt(10);
                 staff.password = await bcrypt.hash(req.body.password, salt);
             }
@@ -299,10 +300,40 @@ const getStaffById = async (req, res) => {
     }
 };
 
+// @desc    Reset staff password
+// @route   PUT /api/staff/:id/reset-password
+// @access  Private/Admin
+const resetPassword = async (req, res) => {
+    try {
+        const staff = await Staff.findById(req.params.id);
+
+        if (!staff) {
+            return res.status(404).json({ message: 'Staff not found' });
+        }
+
+        if (!req.body.password) {
+            return res.status(400).json({ message: 'Please provide a password' });
+        }
+
+        // Generate salt
+        const salt = await bcrypt.genSalt(10);
+        // Hash password
+        staff.password = await bcrypt.hash(req.body.password, salt);
+
+        await staff.save();
+
+        res.json({ message: 'Password updated successfully' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
 module.exports = {
     getAllStaff,
     getStaffById,
     updateStaff,
     deleteStaff,
-    createStaff
+    createStaff,
+    resetPassword
 };
