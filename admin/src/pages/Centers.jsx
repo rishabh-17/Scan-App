@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Select from 'react-select';
 import { getCenters, createCenter, updateCenter, deleteCenter, getUsers } from '../services/api';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import Button from '../components/Button';
 import ConfirmModal from '../components/ConfirmModal';
 import AlertModal from '../components/AlertModal';

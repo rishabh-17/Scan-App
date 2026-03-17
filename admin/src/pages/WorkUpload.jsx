@@ -1,18 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { getProjects, getCenters, validateBulkUpload, bulkCreateScanEntries, getBulkUploadHistory } from '../services/api';
-import { useAuth } from '../context/AuthContext';
 import Button from '../components/Button';
 import ConfirmModal from '../components/ConfirmModal';
 import AlertModal from '../components/AlertModal';
 
 const WorkUpload = () => {
-  const { user } = useAuth();
   const [projects, setProjects] = useState([]);
   const [centers, setCenters] = useState([]);
   const [selectedProject, setSelectedProject] = useState('');
   const [selectedCenter, setSelectedCenter] = useState('');
-  const [uploadDate, setUploadDate] = useState(() => {
+  const [uploadDate] = useState(() => {
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -91,7 +89,7 @@ const WorkUpload = () => {
       setFilteredProjects([]);
       setSelectedProject('');
     }
-  }, [selectedCenter, projects]);
+  }, [selectedCenter, centers, projects, selectedProject]);
 
   const fetchMetadata = async () => {
     try {

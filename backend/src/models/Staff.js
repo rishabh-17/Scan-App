@@ -14,6 +14,21 @@ const staffSchema = new mongoose.Schema({
   dob: {
     type: Date,
   },
+  location: {
+    type: String,
+  },
+  gender: {
+    type: String,
+  },
+  fatherName: {
+    type: String,
+  },
+  motherName: {
+    type: String,
+  },
+  bloodGroup: {
+    type: String,
+  },
   address: {
     type: String,
   },
@@ -55,6 +70,10 @@ const staffSchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
+  alternateMobile: {
+    type: String,
+    required: true,
+  },
   email: {
     type: String,
     sparse: true,
@@ -65,6 +84,30 @@ const staffSchema = new mongoose.Schema({
   },
   idProof: {
     type: String, // URL or base64
+  },
+  bankPassbookDoc: {
+    type: String, // URL or base64
+  },
+  educationalDoc: {
+    type: String, // URL or base64
+  },
+  highestEducation: {
+    type: String,
+  },
+  affiliatedUniversity: {
+    type: String,
+  },
+  previousEmployment: {
+    type: String,
+  },
+  referenceSource: {
+    type: String,
+  },
+  agencyName: {
+    type: String,
+  },
+  referenceContactNo: {
+    type: String,
   },
   center: {
     type: mongoose.Schema.Types.ObjectId,

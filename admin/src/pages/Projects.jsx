@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Select from 'react-select';
 import { getProjects, createProject, updateProject, deleteProject, getCenters, getUsers } from '../services/api';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import Button from '../components/Button';
 import ConfirmModal from '../components/ConfirmModal';
 import AlertModal from '../components/AlertModal';
@@ -62,11 +62,7 @@ const Projects = () => {
     setFormData({ ...formData, rateChart: updatedRateChart });
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const promises = [getProjects()];
 
@@ -96,7 +92,11 @@ const Projects = () => {
       console.error('Error fetching data:', error);
       setLoading(false);
     }
-  };
+  }, [currentUser?.role]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleInputChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });

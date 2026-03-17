@@ -50,7 +50,7 @@ const ApprovalDashboard = () => {
     }
   };
 
-  const handleApprove = async (id, currentStatus) => {
+  const handleApprove = async (id) => {
     setProcessingId(id);
     try {
       // Use generic approval (no level needed)

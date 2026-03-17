@@ -38,27 +38,40 @@ const Payroll = () => {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    fetchCentersAndProjects();
+    const loadFilters = async () => {
+      try {
+        const [centersData, projectsData] = await Promise.all([getCenters(), getProjects()]);
+        setCenters(centersData);
+        setProjects(projectsData);
+      } catch (error) {
+        console.error('Error fetching filters:', error);
+      }
+    };
+    loadFilters();
   }, []);
 
   useEffect(() => {
-    fetchPayroll();
-    fetchPaymentHistory();
+    const loadInitial = async () => {
+      setLoading(true);
+      try {
+        const [payrollResponse, historyResponse] = await Promise.all([
+          api.get('/payroll'),
+          api.get('/payments'),
+        ]);
+        setPayrollData(payrollResponse.data);
+        setPaymentHistory(historyResponse.data);
+      } catch (error) {
+        console.error('Error loading payroll:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadInitial();
   }, []);
 
   const handleSearch = async () => {
     setLoading(true);
     await Promise.all([fetchPayroll(), fetchPaymentHistory()]);
-  };
-
-  const fetchCentersAndProjects = async () => {
-    try {
-      const [centersData, projectsData] = await Promise.all([getCenters(), getProjects()]);
-      setCenters(centersData);
-      setProjects(projectsData);
-    } catch (error) {
-      console.error('Error fetching filters:', error);
-    }
   };
 
   const fetchPayroll = async () => {
@@ -229,6 +242,7 @@ const Payroll = () => {
   };
 
   const handleImportClick = () => {
+    if (!fileInputRef.current) return;
     fileInputRef.current.click();
   };
 
@@ -251,7 +265,7 @@ const Payroll = () => {
     ];
 
     // 3. Build Staff Credit Rows
-    const staffRows = payrollData.map((item, index) => {
+    const staffRows = payrollData.map((item) => {
       // Logic for the first column (ID/Code): Using a sequential ID or derived from account if needed.
       // For now, using a simple logic or keeping it static/derived. 
       // The user example had '1141', '10210' which look like first digits of account or random.
@@ -472,12 +486,12 @@ const Payroll = () => {
           >
             Export to Excel
           </Button>
-          {/* <Button
+          <Button
             onClick={handleImportClick}
             loading={importing}
           >
             Import Payments (Excel)
-          </Button> */}
+          </Button>
         </div>
       </div>
 
@@ -560,8 +574,8 @@ const Payroll = () => {
                         <td colSpan="7" className="py-12 text-center text-gray-500">No pending payouts available</td>
                       </tr>
                     ) : (
-                      payrollData.map((item, index) => (
-                        <tr key={index} className={`hover:bg-gray-50 transition ${selectedIds.has(item.operatorId) ? 'bg-blue-50' : ''}`}>
+                      payrollData.map((item) => (
+                        <tr key={item.operatorId} className={`hover:bg-gray-50 transition ${selectedIds.has(item.operatorId) ? 'bg-blue-50' : ''}`}>
                           <td className="px-6 py-4">
                             <input
                               type="checkbox"

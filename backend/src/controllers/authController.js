@@ -14,9 +14,40 @@ const generateToken = (id) => {
 // @route   POST /api/auth/register
 // @access  Public
 const registerStaff = async (req, res) => {
-  let { name, mobile, email, dob, address, city, state, pincode, aadhaarNumber, aadhaarDoc, panNumber, panDoc, bankDetails, center, password } = req.body;
+  let {
+    name,
+    location,
+    gender,
+    fatherName,
+    motherName,
+    bloodGroup,
+    mobile,
+    alternateMobile,
+    email,
+    dob,
+    address,
+    city,
+    state,
+    pincode,
+    aadhaarNumber,
+    aadhaarDoc,
+    panNumber,
+    panDoc,
+    photo,
+    bankPassbookDoc,
+    educationalDoc,
+    highestEducation,
+    affiliatedUniversity,
+    previousEmployment,
+    referenceSource,
+    agencyName,
+    referenceContactNo,
+    bankDetails,
+    center,
+    password
+  } = req.body;
 
-  if (!name || !mobile || !password || !center) {
+  if (!name || !mobile || !alternateMobile || !password || !center) {
     return res.status(400).json({ message: 'Please add all required fields' });
   }
 
@@ -37,6 +68,9 @@ const registerStaff = async (req, res) => {
   const mobileRegex = /^[6-9]\d{9}$/;
   if (!mobileRegex.test(mobile)) {
     return res.status(400).json({ message: 'Invalid mobile number' });
+  }
+  if (!mobileRegex.test(alternateMobile)) {
+    return res.status(400).json({ message: 'Invalid alternate mobile number' });
   }
 
   if (panNumber) {
@@ -91,7 +125,13 @@ const registerStaff = async (req, res) => {
   // Create staff
   const staff = await Staff.create({
     name,
+    location: location || '',
+    gender: gender || '',
+    fatherName: fatherName || '',
+    motherName: motherName || '',
+    bloodGroup: bloodGroup || '',
     mobile,
+    alternateMobile,
     email,
     dob,
     password: hashedPassword,
@@ -106,6 +146,15 @@ const registerStaff = async (req, res) => {
     aadhaarDoc: aadhaarDoc || '',
     panNumber: panNumber || '',
     panDoc: panDoc || '',
+    photo: photo || '',
+    bankPassbookDoc: bankPassbookDoc || '',
+    educationalDoc: educationalDoc || '',
+    highestEducation: highestEducation || '',
+    affiliatedUniversity: affiliatedUniversity || '',
+    previousEmployment: previousEmployment || '',
+    referenceSource: referenceSource || '',
+    agencyName: agencyName || '',
+    referenceContactNo: referenceContactNo || '',
     bankDetails: {
       accountNo: bankDetails?.accountNo || '',
       ifscCode: bankDetails?.ifscCode || '',
@@ -152,13 +201,30 @@ const loginStaff = async (req, res) => {
       role: staff.role,
       center: staff.center,
       project: staff.project,
+      location: staff.location,
+      gender: staff.gender,
+      fatherName: staff.fatherName,
+      motherName: staff.motherName,
+      bloodGroup: staff.bloodGroup,
+      alternateMobile: staff.alternateMobile,
       address: staff.address,
       city: staff.city,
       state: staff.state,
       pincode: staff.pincode,
       aadhaarNumber: staff.aadhaarNumber,
+      aadhaarDoc: staff.aadhaarDoc,
       panNumber: staff.panNumber,
+      panDoc: staff.panDoc,
       bankDetails: staff.bankDetails,
+      photo: staff.photo,
+      bankPassbookDoc: staff.bankPassbookDoc,
+      educationalDoc: staff.educationalDoc,
+      highestEducation: staff.highestEducation,
+      affiliatedUniversity: staff.affiliatedUniversity,
+      previousEmployment: staff.previousEmployment,
+      referenceSource: staff.referenceSource,
+      agencyName: staff.agencyName,
+      referenceContactNo: staff.referenceContactNo,
       token: generateToken(staff._id),
     });
   } else {
@@ -183,16 +249,61 @@ const updateProfile = async (req, res) => {
     return res.status(404).json({ message: 'User not found' });
   }
 
-  const { name, email, dob, address, city, state, pincode, aadhaarNumber, bankDetails, panNumber } = req.body;
+  const {
+    name,
+    location,
+    gender,
+    fatherName,
+    motherName,
+    bloodGroup,
+    alternateMobile,
+    email,
+    dob,
+    address,
+    city,
+    state,
+    pincode,
+    aadhaarNumber,
+    aadhaarDoc,
+    bankDetails,
+    panNumber,
+    panDoc,
+    photo,
+    bankPassbookDoc,
+    educationalDoc,
+    highestEducation,
+    affiliatedUniversity,
+    previousEmployment,
+    referenceSource,
+    agencyName,
+    referenceContactNo
+  } = req.body;
 
   if (name) user.name = name;
   if (email) user.email = email;
   if (dob) user.dob = dob;
+  if (location) user.location = location;
+  if (gender) user.gender = gender;
+  if (fatherName) user.fatherName = fatherName;
+  if (motherName) user.motherName = motherName;
+  if (bloodGroup) user.bloodGroup = bloodGroup;
+  if (alternateMobile) user.alternateMobile = alternateMobile;
   if (address) user.address = address;
   if (city) user.city = city;
   if (state) user.state = state;
   if (pincode) user.pincode = pincode;
   if (aadhaarNumber) user.aadhaarNumber = aadhaarNumber;
+  if (aadhaarDoc) user.aadhaarDoc = aadhaarDoc;
+  if (panDoc) user.panDoc = panDoc;
+  if (photo) user.photo = photo;
+  if (bankPassbookDoc) user.bankPassbookDoc = bankPassbookDoc;
+  if (educationalDoc) user.educationalDoc = educationalDoc;
+  if (highestEducation) user.highestEducation = highestEducation;
+  if (affiliatedUniversity) user.affiliatedUniversity = affiliatedUniversity;
+  if (previousEmployment) user.previousEmployment = previousEmployment;
+  if (referenceSource) user.referenceSource = referenceSource;
+  if (agencyName) user.agencyName = agencyName;
+  if (referenceContactNo) user.referenceContactNo = referenceContactNo;
 
   if (panNumber) {
     const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
@@ -237,13 +348,30 @@ const updateProfile = async (req, res) => {
     role: updatedUser.role,
     center: updatedUser.center,
     project: updatedUser.project,
+    location: updatedUser.location,
+    gender: updatedUser.gender,
+    fatherName: updatedUser.fatherName,
+    motherName: updatedUser.motherName,
+    bloodGroup: updatedUser.bloodGroup,
+    alternateMobile: updatedUser.alternateMobile,
     address: updatedUser.address,
     city: updatedUser.city,
     state: updatedUser.state,
     pincode: updatedUser.pincode,
     aadhaarNumber: updatedUser.aadhaarNumber,
+    aadhaarDoc: updatedUser.aadhaarDoc,
     panNumber: updatedUser.panNumber,
+    panDoc: updatedUser.panDoc,
     bankDetails: updatedUser.bankDetails,
+    photo: updatedUser.photo,
+    bankPassbookDoc: updatedUser.bankPassbookDoc,
+    educationalDoc: updatedUser.educationalDoc,
+    highestEducation: updatedUser.highestEducation,
+    affiliatedUniversity: updatedUser.affiliatedUniversity,
+    previousEmployment: updatedUser.previousEmployment,
+    referenceSource: updatedUser.referenceSource,
+    agencyName: updatedUser.agencyName,
+    referenceContactNo: updatedUser.referenceContactNo,
     token: generateToken(updatedUser._id),
   });
 };

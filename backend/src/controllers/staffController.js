@@ -1,6 +1,7 @@
 const Staff = require('../models/Staff');
 const Center = require('../models/Center');
 const bcrypt = require('bcryptjs');
+const XLSX = require('xlsx');
 
 // @desc    Get all staff
 // @route   GET /api/staff
@@ -329,11 +330,243 @@ const resetPassword = async (req, res) => {
     }
 };
 
+const normalizeHeader = (value) => {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '');
+};
+
+const toText = (value) => {
+    if (value === null || value === undefined) return '';
+    return String(value).trim();
+};
+
+const digitsOnly = (value) => {
+    return toText(value).replace(/\D/g, '');
+};
+
+const importStaff = async (req, res) => {
+    try {
+        if (!req.file || !req.file.buffer) {
+            return res.status(400).json({ message: 'No file uploaded' });
+        }
+
+        const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        if (!sheetName) {
+            return res.status(400).json({ message: 'No sheet found in file' });
+        }
+
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+        if (!Array.isArray(rows) || rows.length === 0) {
+            return res.status(400).json({ message: 'No data rows found in sheet' });
+        }
+
+        const headerKeyMap = {
+            sno: 'sNo',
+            location: 'location',
+            name: 'name',
+            gender: 'gender',
+            fathername: 'fatherName',
+            mothername: 'motherName',
+            bloodgroup: 'bloodGroup',
+            mobileno: 'mobile',
+            mobile: 'mobile',
+            mobilenumber: 'mobile',
+            alternatenumbermandatory: 'alternateMobile',
+            alternatenumber: 'alternateMobile',
+            alternatemobile: 'alternateMobile',
+            emailid: 'email',
+            email: 'email',
+            aadharnumber: 'aadhaarNumber',
+            aadhaarnumber: 'aadhaarNumber',
+            pannumber: 'panNumber',
+            pan: 'panNumber',
+            bankname: 'bankName',
+            ifsccode: 'ifscCode',
+            accountnumber: 'accountNo',
+            presentaddress: 'address',
+            highesteducation: 'highestEducation',
+            affliateduniversty: 'affiliatedUniversity',
+            affiliateduniversity: 'affiliatedUniversity',
+            priviousemployemenyifany: 'previousEmployment',
+            previousemploymentifany: 'previousEmployment',
+            previousemployment: 'previousEmployment',
+            reference: 'referenceSource',
+            referencedirectwalkinagency: 'referenceSource',
+            ifagencyagencyname: 'agencyName',
+            agencyname: 'agencyName',
+            referencecontactnoanyonefromyourpastacadamicfaculty: 'referenceContactNo',
+            referencecontactno: 'referenceContactNo',
+            aadhar: 'aadhaarDoc',
+            aadhardoc: 'aadhaarDoc',
+            pancard: 'panDoc',
+            bankpassbook: 'bankPassbookDoc',
+            passportsizephoto: 'photo',
+            educationaldoc: 'educationalDoc',
+        };
+
+        const normalizedRows = rows.map((row) => {
+            const normalized = {};
+            Object.keys(row || {}).forEach((key) => {
+                const mapped = headerKeyMap[normalizeHeader(key)];
+                if (!mapped) return;
+                normalized[mapped] = row[key];
+            });
+            return normalized;
+        });
+
+        const centers = await Center.find({}).select('_id name centerCode location');
+        const centerLookup = new Map();
+        centers.forEach((c) => {
+            const nameKey = normalizeHeader(c.name);
+            if (nameKey) centerLookup.set(nameKey, c._id.toString());
+            const codeKey = normalizeHeader(c.centerCode);
+            if (codeKey) centerLookup.set(codeKey, c._id.toString());
+            const locKey = normalizeHeader(c.location);
+            if (locKey) centerLookup.set(locKey, c._id.toString());
+        });
+
+        let allowedCenterIds = null;
+        if (req.user && req.user.role === 'center_supervisor') {
+            const managedCenters = await Center.find({ supervisors: req.user._id }).select('_id');
+            allowedCenterIds = new Set(managedCenters.map((c) => c._id.toString()));
+        }
+
+        const mobiles = normalizedRows.map(r => digitsOnly(r.mobile)).filter(Boolean);
+        const existing = await Staff.find({ mobile: { $in: mobiles } });
+        const existingByMobile = new Map(existing.map((s) => [s.mobile, s]));
+
+        const salt = await bcrypt.genSalt(10);
+        const defaultPasswordHash = await bcrypt.hash('123456', salt);
+
+        let created = 0;
+        let updated = 0;
+        const failures = [];
+
+        for (let i = 0; i < normalizedRows.length; i += 1) {
+            const rowNumber = i + 2;
+            const r = normalizedRows[i] || {};
+
+            const name = toText(r.name);
+            const mobile = digitsOnly(r.mobile);
+            const alternateMobile = digitsOnly(r.alternateMobile);
+
+            if (!name || !mobile || !alternateMobile) {
+                failures.push({ rowNumber, reason: 'Missing required fields (Name, Mobile No, Alternate Number)' });
+                continue;
+            }
+
+            const locationText = toText(r.location);
+            const centerId = locationText ? centerLookup.get(normalizeHeader(locationText)) : undefined;
+
+            if (allowedCenterIds && !centerId) {
+                failures.push({ rowNumber, reason: 'Location does not match an assigned center' });
+                continue;
+            }
+
+            if (allowedCenterIds && centerId && !allowedCenterIds.has(centerId)) {
+                failures.push({ rowNumber, reason: 'Not authorized to import staff for this center' });
+                continue;
+            }
+
+            const bankDetailsPatch = {
+                accountNo: toText(r.accountNo) || undefined,
+                ifscCode: toText(r.ifscCode) || undefined,
+                bankName: toText(r.bankName) || undefined,
+            };
+
+            const hasBankDetails = Object.values(bankDetailsPatch).some((v) => v !== undefined);
+
+            const patch = {
+                name,
+                mobile,
+                alternateMobile,
+                email: toText(r.email) || undefined,
+                location: locationText || undefined,
+                gender: toText(r.gender) || undefined,
+                fatherName: toText(r.fatherName) || undefined,
+                motherName: toText(r.motherName) || undefined,
+                bloodGroup: toText(r.bloodGroup) || undefined,
+                aadhaarNumber: digitsOnly(r.aadhaarNumber) || undefined,
+                panNumber: toText(r.panNumber) || undefined,
+                address: toText(r.address) || undefined,
+                highestEducation: toText(r.highestEducation) || undefined,
+                affiliatedUniversity: toText(r.affiliatedUniversity) || undefined,
+                previousEmployment: toText(r.previousEmployment) || undefined,
+                referenceSource: toText(r.referenceSource) || undefined,
+                agencyName: toText(r.agencyName) || undefined,
+                referenceContactNo: toText(r.referenceContactNo) || undefined,
+                photo: toText(r.photo) || undefined,
+                educationalDoc: toText(r.educationalDoc) || undefined,
+                bankPassbookDoc: toText(r.bankPassbookDoc) || undefined,
+                aadhaarDoc: toText(r.aadhaarDoc) || undefined,
+                panDoc: toText(r.panDoc) || undefined,
+                bankDetails: hasBankDetails ? { ...bankDetailsPatch, accountHolderName: name } : undefined,
+            };
+
+            if (centerId) patch.center = centerId;
+
+            const existingStaff = existingByMobile.get(mobile);
+            if (existingStaff) {
+                Object.keys(patch).forEach((k) => {
+                    if (patch[k] === undefined) return;
+                    if (k === 'bankDetails') {
+                        existingStaff.bankDetails = {
+                            ...(existingStaff.bankDetails || {}),
+                            ...(patch.bankDetails || {}),
+                        };
+                        return;
+                    }
+                    existingStaff[k] = patch[k];
+                });
+
+                try {
+                    await existingStaff.save();
+                    updated += 1;
+                } catch (e) {
+                    failures.push({ rowNumber, reason: e.message || 'Failed to update staff' });
+                }
+                continue;
+            }
+
+            const staffDoc = new Staff({
+                ...patch,
+                role: 'staff',
+                status: 'pending',
+                employeeId: `IMP-${mobile}`,
+                password: defaultPasswordHash,
+            });
+
+            try {
+                const saved = await staffDoc.save();
+                existingByMobile.set(mobile, saved);
+                created += 1;
+            } catch (e) {
+                failures.push({ rowNumber, reason: e.message || 'Failed to create staff' });
+            }
+        }
+
+        res.json({
+            totalRows: normalizedRows.length,
+            created,
+            updated,
+            failed: failures.length,
+            failures,
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message || 'Server error' });
+    }
+};
+
 module.exports = {
     getAllStaff,
     getStaffById,
     updateStaff,
     deleteStaff,
     createStaff,
-    resetPassword
+    resetPassword,
+    importStaff
 };

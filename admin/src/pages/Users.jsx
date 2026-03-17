@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { getUsers, createUser, updateUser, deleteUser, getCenters, getProjects } from '../services/api';
-import { useAuth } from '../context/AuthContext';
+import React, { useState, useEffect, useCallback } from 'react';
+import { getUsers, createUser, updateUser, deleteUser } from '../services/api';
+import { useAuth } from '../context/useAuth';
 import Button from '../components/Button';
 import ConfirmModal from '../components/ConfirmModal';
 import AlertModal from '../components/AlertModal';
@@ -8,8 +8,6 @@ import AlertModal from '../components/AlertModal';
 const Users = () => {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
-  const [centers, setCenters] = useState([]);
-  const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -37,26 +35,20 @@ const Users = () => {
     status: 'active',
   });
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
-      const [usersData, centersData, projectsData] = await Promise.all([
-        getUsers({ excludeRole: 'staff' }),
-        getCenters(),
-        getProjects()
-      ]);
+      const usersData = await getUsers({ excludeRole: 'staff' });
       setUsers(usersData);
-      setCenters(centersData);
-      setProjects(projectsData);
       setLoading(false);
     } catch (error) {
       console.error('Error fetching data:', error);
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleInputChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });

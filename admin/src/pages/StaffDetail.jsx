@@ -9,19 +9,18 @@ const StaffDetail = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchStaffDetails();
+    const load = async () => {
+      try {
+        const response = await api.get(`/staff/${id}`);
+        setStaff(response.data);
+        setLoading(false);
+      } catch (error) {
+        console.error('Error fetching staff details:', error);
+        setLoading(false);
+      }
+    };
+    load();
   }, [id]);
-
-  const fetchStaffDetails = async () => {
-    try {
-      const response = await api.get(`/staff/${id}`);
-      setStaff(response.data);
-      setLoading(false);
-    } catch (error) {
-      console.error('Error fetching staff details:', error);
-      setLoading(false);
-    }
-  };
 
   if (loading) return <div className="p-6 text-gray-500">Loading staff details...</div>;
   if (!staff) return <div className="p-6 text-red-500">Staff not found</div>;
@@ -31,7 +30,7 @@ const StaffDetail = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <button 
+          <button
             onClick={() => navigate(-1)}
             className="text-sm text-gray-500 hover:text-gray-700 mb-2 flex items-center gap-1"
           >
@@ -40,10 +39,9 @@ const StaffDetail = () => {
           <h1 className="text-2xl font-bold text-gray-900">{staff.name}</h1>
           <p className="text-sm text-gray-500">{staff.role} • {staff.center}</p>
         </div>
-        <span className={`px-3 py-1 text-sm font-medium rounded-full ${
-          staff.status === 'active' ? 'bg-green-100 text-green-800' :
-          staff.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
-        }`}>
+        <span className={`px-3 py-1 text-sm font-medium rounded-full ${staff.status === 'active' ? 'bg-green-100 text-green-800' :
+            staff.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
+          }`}>
           {staff.status.toUpperCase()}
         </span>
       </div>

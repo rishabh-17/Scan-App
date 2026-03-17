@@ -99,6 +99,15 @@ export const resetUserPassword = async (id, password) => {
   return response.data;
 };
 
+export const importStaff = async (file) => {
+  const data = new FormData();
+  data.append('file', file);
+  const response = await api.post('/staff/import', data, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return response.data;
+};
+
 // --- Project Management ---
 export const getProjects = async () => {
   const response = await api.get('/projects');

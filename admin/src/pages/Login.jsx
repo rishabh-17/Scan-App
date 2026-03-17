@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import { useNavigate } from 'react-router-dom';
 import compactLogo from '../assets/compact_logo.png';
 
@@ -15,7 +15,7 @@ const Login = () => {
     try {
       await login(mobile, password);
       navigate('/');
-    } catch (err) {
+    } catch {
       setError('Invalid credentials');
     }
   };

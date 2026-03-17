@@ -1,5 +1,5 @@
 import React from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import compactLogo from '../assets/compact_logo.png';
 

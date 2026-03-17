@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
-import { useAuth } from '../context/AuthContext';
 import Button from '../components/Button';
 import Loader from '../components/Loader';
 import ConfirmModal from '../components/ConfirmModal';
@@ -8,7 +7,6 @@ import AlertModal from '../components/AlertModal';
 import Modal from '../components/Modal'; // For custom reject modal
 
 const Dashboard = () => {
-  const { user } = useAuth();
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -25,23 +23,26 @@ const Dashboard = () => {
   const [rejectModal, setRejectModal] = useState({ isOpen: false, ids: [] });
   const [rejectReason, setRejectReason] = useState('');
 
-  useEffect(() => {
-    fetchEntries();
-    setSelectedIds(new Set());
-  }, [activeTab]);
-
-  const fetchEntries = async () => {
+  const fetchEntries = useCallback(async () => {
     setLoading(true);
     try {
       const endpoint = activeTab === 'pending' ? '/scan-entry/pending' : '/scan-entry/pending?type=approved';
       const response = await api.get(endpoint);
       setEntries(response.data);
-    } catch (err) {
+    } catch {
       setError('Failed to fetch entries');
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeTab]);
+
+  useEffect(() => {
+    const run = async () => {
+      await fetchEntries();
+      setSelectedIds(new Set());
+    };
+    run();
+  }, [fetchEntries]);
 
   const handleApprove = async (id) => {
     setProcessingId(id);
@@ -79,7 +80,7 @@ const Dashboard = () => {
       await fetchEntries();
       setConfirmConfig({ ...confirmConfig, isOpen: false });
       setAlertConfig({ isOpen: true, title: 'Success', message: 'Selected entries approved successfully', variant: 'success' });
-    } catch (err) {
+    } catch {
       setConfirmConfig({ ...confirmConfig, isOpen: false });
       setAlertConfig({ isOpen: true, title: 'Error', message: 'Some approvals failed. Please check the list.' });
       fetchEntries();

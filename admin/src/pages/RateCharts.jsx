@@ -6,53 +6,51 @@ const RateCharts = () => {
   const [rates, setRates] = useState([]);
 
   useEffect(() => {
-    fetchRates();
-  }, []);
+    const load = async () => {
+      try {
+        const projects = await getProjects();
+        const processedRates = [];
 
-  const fetchRates = async () => {
-    try {
-      const projects = await getProjects();
-      const processedRates = [];
-
-      projects.forEach(project => {
-        // 1. Default Scan Rate
-        if (project.scanRate) {
-          processedRates.push({
-            id: `${project._id}-default`,
-            activityName: 'Scanning (Default)',
-            rate: project.scanRate,
-            project: project.name,
-            centers: project.centers?.map(c => c.name).join(', ') || 'All Assigned',
-            effectiveDate: project.updatedAt, // Using project update time as proxy or current
-            status: project.isActive ? 'Active' : 'Inactive',
-            type: 'default'
-          });
-        }
-
-        // 2. Rate Chart Items
-        if (project.rateChart && project.rateChart.length > 0) {
-          project.rateChart.forEach((item, index) => {
+        projects.forEach(project => {
+          if (project.scanRate) {
             processedRates.push({
-              id: `${project._id}-${index}`,
-              activityName: item.activityName,
-              rate: item.rate,
+              id: `${project._id}-default`,
+              activityName: 'Scanning (Default)',
+              rate: project.scanRate,
               project: project.name,
               centers: project.centers?.map(c => c.name).join(', ') || 'All Assigned',
-              effectiveDate: item.effectiveDate,
-              status: item.status,
-              type: 'custom'
+              effectiveDate: project.updatedAt,
+              status: project.isActive ? 'Active' : 'Inactive',
+              type: 'default'
             });
-          });
-        }
-      });
+          }
 
-      setRates(processedRates);
-      setLoading(false);
-    } catch (error) {
-      console.error('Error fetching rates:', error);
-      setLoading(false);
-    }
-  };
+          if (project.rateChart && project.rateChart.length > 0) {
+            project.rateChart.forEach((item, index) => {
+              processedRates.push({
+                id: `${project._id}-${index}`,
+                activityName: item.activityName,
+                rate: item.rate,
+                project: project.name,
+                centers: project.centers?.map(c => c.name).join(', ') || 'All Assigned',
+                effectiveDate: item.effectiveDate,
+                status: item.status,
+                type: 'custom'
+              });
+            });
+          }
+        });
+
+        setRates(processedRates);
+        setLoading(false);
+      } catch (error) {
+        console.error('Error fetching rates:', error);
+        setLoading(false);
+      }
+    };
+
+    load();
+  }, []);
 
   if (loading) {
     return (
@@ -100,11 +98,10 @@ const RateCharts = () => {
                     {rate.effectiveDate ? new Date(rate.effectiveDate).toLocaleDateString() : '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      rate.status === 'Active' || rate.status === 'active' 
-                        ? 'bg-green-100 text-green-800' 
+                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${rate.status === 'Active' || rate.status === 'active'
+                        ? 'bg-green-100 text-green-800'
                         : 'bg-red-100 text-red-800'
-                    }`}>
+                      }`}>
                       {rate.status}
                     </span>
                   </td>

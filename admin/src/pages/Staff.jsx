@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import {
   getUsers,
   createUser,
@@ -8,7 +8,8 @@ import {
   deleteUser,
   getCenters,
   getProjects,
-  resetUserPassword
+  resetUserPassword,
+  importStaff
 } from '../services/api';
 import Button from '../components/Button';
 import ConfirmModal from '../components/ConfirmModal';
@@ -24,6 +25,7 @@ const Staff = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const importInputRef = useRef(null);
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
     title: '',
@@ -69,6 +71,87 @@ const Staff = () => {
     }
   };
 
+  const downloadImportTemplate = () => {
+    const headers = [
+      'S.No',
+      'Location',
+      'Name',
+      'Gender',
+      'Father Name',
+      'Mother Name',
+      'Blood Group',
+      'Mobile No',
+      'Alternate Number - Mandatory',
+      'Email Id',
+      'Aadhar Number',
+      'PAN Number',
+      'Bank Name',
+      'IFSC Code',
+      'Account Number',
+      'Present Address',
+      'Highest Education',
+      'Affliated Universty',
+      'Privious Employemeny If any',
+      'Reference (Direct Walkin, Agency)',
+      'If Agency - Agency Name',
+      'Reference Contact No(Any one from your past acadamic faculty)',
+      'Documents Name',
+      'Documents Number',
+      'Aadhar',
+      'Pan Card',
+      'Bank Pass book',
+      'Passport Size Photo',
+      'Educational Doc'
+    ];
+
+    const csv = `${headers.join(',')}\n`;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'staff_import_template.csv';
+    link.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const openImportPicker = () => {
+    if (importInputRef.current) {
+      importInputRef.current.value = '';
+      importInputRef.current.click();
+    }
+  };
+
+  const handleImportFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setActionLoading(true);
+    try {
+      const result = await importStaff(file);
+      const failedRows = Array.isArray(result.failures) ? result.failures.map(f => f.rowNumber).filter(Boolean) : [];
+      const failedSummary = failedRows.length > 0
+        ? ` Failed rows: ${failedRows.slice(0, 15).join(', ')}${failedRows.length > 15 ? '...' : ''}`
+        : '';
+
+      setAlertModal({
+        isOpen: true,
+        title: 'Import Completed',
+        message: `Total: ${result.totalRows} | Created: ${result.created} | Updated: ${result.updated} | Failed: ${result.failed}.${failedSummary}`,
+        variant: result.failed > 0 ? 'warning' : 'success'
+      });
+      fetchData();
+    } catch (error) {
+      setAlertModal({
+        isOpen: true,
+        title: 'Import Failed',
+        message: error.response?.data?.message || 'Failed to import staff',
+        variant: 'danger'
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const initialFormState = {
     name: '',
     mobile: '',
@@ -105,7 +188,7 @@ const Staff = () => {
     fetchData();
   }, []);
 
-  const fetchData = async () => {
+  async function fetchData() {
     try {
       const [staffRes, centersRes, projectsRes] = await Promise.all([
         getUsers({ role: 'staff' }), // Fetch staff users only
@@ -120,7 +203,7 @@ const Staff = () => {
       console.error('Error fetching data:', error);
       setLoading(false);
     }
-  };
+  }
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -311,13 +394,36 @@ const Staff = () => {
           </p>
         </div>
 
-        <button
-          onClick={handleAddClick}
-          className={`bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition shadow-sm ${(currentUser?.role !== 'admin' && currentUser?.role !== 'center_supervisor') ? 'hidden' : ''
-            }`}
-        >
-          Add Staff
-        </button>
+        <div className={`flex items-center gap-2 ${(currentUser?.role !== 'admin' && currentUser?.role !== 'center_supervisor') ? 'hidden' : ''}`}>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".csv,.xlsx,.xls"
+            onChange={handleImportFileChange}
+            className="hidden"
+          />
+          <button
+            onClick={downloadImportTemplate}
+            className="bg-white text-gray-900 px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 hover:bg-gray-50 transition shadow-sm"
+            disabled={actionLoading}
+          >
+            Download Template
+          </button>
+          <button
+            onClick={openImportPicker}
+            className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-black transition shadow-sm"
+            disabled={actionLoading}
+          >
+            Import Excel/CSV
+          </button>
+          <button
+            onClick={handleAddClick}
+            className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition shadow-sm"
+            disabled={actionLoading}
+          >
+            Add Staff
+          </button>
+        </div>
       </div>
 
       {/* Table */}
@@ -776,18 +882,18 @@ const Staff = () => {
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
           <div className="relative bg-white rounded-xl shadow-lg max-w-md w-full mx-4 p-6">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Reset Password for {passwordModal.staffName}</h3>
-            
+
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
               <input
                 type="text"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
                 value={passwordModal.newPassword}
-                onChange={(e) => setPasswordModal({...passwordModal, newPassword: e.target.value})}
+                onChange={(e) => setPasswordModal({ ...passwordModal, newPassword: e.target.value })}
                 placeholder="Enter new password"
               />
             </div>
-            
+
             <div className="flex justify-end space-x-3 mt-6">
               <button
                 onClick={() => setPasswordModal({ isOpen: false, staffId: null, staffName: '', newPassword: '' })}
