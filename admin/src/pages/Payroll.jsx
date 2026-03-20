@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import Button from '../components/Button';
 import ConfirmModal from '../components/ConfirmModal';
 import AlertModal from '../components/AlertModal';
-import { getCenters, getProjects } from '../services/api';
+import { getCenters, getProjects, importPayroll } from '../services/api';
 
 const Payroll = () => {
   const [activeTab, setActiveTab] = useState('payouts');
@@ -36,6 +36,7 @@ const Payroll = () => {
   });
 
   const fileInputRef = useRef(null);
+  const payrollFileInputRef = useRef(null);
 
   useEffect(() => {
     const loadFilters = async () => {
@@ -246,59 +247,93 @@ const Payroll = () => {
     fileInputRef.current.click();
   };
 
+  const handlePayrollImportClick = () => {
+    if (!payrollFileInputRef.current) return;
+    payrollFileInputRef.current.click();
+  };
+
   const handleExport = () => {
-    // 1. Calculate Header / Company Debit Data
-    const totalAmount = calculateTotalPayout();
     const date = new Date();
     const monthYear = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }).toUpperCase();
-    const narrative = `${monthYear} PYMT`;
 
-    // 2. Define Rows
-    const headerRow = ['FILEHDR', 'COEMPTPVTLTD', '1', '', '', ''];
-    const companyDebitRow = [
-      '15170',          // Company Code / Transaction Type
-      '15170932310',    // Company Account Number
-      'INR',
-      'DR',
-      totalAmount,
-      narrative
+    const headers = [
+      'S.No.',
+      'User Id',
+      'User Name',
+      'Mobile No',
+      'Department',
+      'Source',
+      'No of Days',
+      'Day Wise Pay',
+      'Total Per Day Payment',
+      'Inward Count',
+      'Inward payment',
+      'Amount Per script Scan',
+      'Scan Count',
+      'Scanning total Amount',
+      'Qc Amount Per script',
+      'Qc Count',
+      'QC total Amount',
+      'Outward Amount Per script',
+      'Outward Count',
+      'Outward total Amount',
+      'Sticker Amount Per script',
+      'Sticker Count',
+      'Sticker Total Amount',
+      'Total Pay= (I+N+Q+T+W)',
+      'Status Pay/Hold',
+      'Aadhar Card Number',
+      'Pan card Number',
+      'Account No',
+      'Bank',
+      'ISFC Code',
     ];
 
-    // 3. Build Staff Credit Rows
-    const staffRows = payrollData.map((item) => {
-      // Logic for the first column (ID/Code): Using a sequential ID or derived from account if needed.
-      // For now, using a simple logic or keeping it static/derived. 
-      // The user example had '1141', '10210' which look like first digits of account or random.
-      // We'll use a generated reference ID based on index to ensure uniqueness, or just a static '10000'.
-      // Let's use a static '50000' or similar for staff payments to distinguish.
-      // OR, we can try to mimic the user's example if it was significant.
-      // User Example: 1141 for 1.14112E+12. It matches first 4 digits.
-      const accountNo = item.bankDetails?.accountNo || '';
-      const refCode = accountNo.length >= 4 ? accountNo.substring(0, 4) : '0000';
+    const exportRows = payrollData.map((item, index) => {
+      const bankDetails = item.bankDetails || {};
+      const totalPay = Number(item.pendingAmount || 0);
+      const scanRate = Number(item.rate || 0);
+      const scanCount = scanRate > 0 ? Math.round(totalPay / scanRate) : '';
 
-      return [
-        refCode,                // Reference / Prefix
-        accountNo,              // Bank Account
-        'INR',
-        'CR',
-        item.totalAmount,       // Amount
-        `To ${item.operatorName}` // Narrative
-      ];
+      return {
+        'S.No.': index + 1,
+        'User Id': item.operatorId || '',
+        'User Name': item.operatorName || '',
+        'Mobile No': item.mobile || '',
+        'Department': '',
+        'Source': '',
+        'No of Days': '',
+        'Day Wise Pay': '',
+        'Total Per Day Payment': '',
+        'Inward Count': 0,
+        'Inward payment': 0,
+        'Amount Per script Scan': scanRate,
+        'Scan Count': scanCount,
+        'Scanning total Amount': totalPay,
+        'Qc Amount Per script': 0,
+        'Qc Count': 0,
+        'QC total Amount': 0,
+        'Outward Amount Per script': 0,
+        'Outward Count': 0,
+        'Outward total Amount': 0,
+        'Sticker Amount Per script': 0,
+        'Sticker Count': 0,
+        'Sticker Total Amount': 0,
+        'Total Pay= (I+N+Q+T+W)': totalPay,
+        'Status Pay/Hold': 'Pay',
+        'Aadhar Card Number': '',
+        'Pan card Number': item.panNumber || '',
+        'Account No': bankDetails.accountNo || '',
+        'Bank': bankDetails.bankName || '',
+        'ISFC Code': bankDetails.ifscCode || '',
+      };
     });
 
-    // 4. Combine all rows
-    const data = [
-      headerRow,
-      companyDebitRow,
-      ...staffRows
-    ];
-
-    // 5. Create Sheet
-    const ws = XLSX.utils.aoa_to_sheet(data);
+    const ws = XLSX.utils.aoa_to_sheet([headers]);
+    XLSX.utils.sheet_add_json(ws, exportRows, { header: headers, skipHeader: true, origin: 'A2' });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Payroll");
 
-    // 6. Generate Filename with Date
     const fileName = `Payroll_Export_${monthYear.replace(' ', '_')}.xlsx`;
     XLSX.writeFile(wb, fileName);
   };
@@ -426,6 +461,40 @@ const Payroll = () => {
     }
   };
 
+  const handlePayrollFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setImporting(true);
+    try {
+      const response = await importPayroll(file);
+      const { results } = response;
+      const errors = Array.isArray(results?.errors) ? results.errors : [];
+      let message = `Import Completed:\nTotal: ${results.total}\nCreated Payments: ${results.createdPayments}\nHold Rows: ${results.heldRows}\nFailed: ${results.failed}`;
+      if (errors.length > 0) {
+        message += `\n\nErrors:\n${errors.slice(0, 5).join('\n')}${errors.length > 5 ? '\n...' : ''}`;
+      }
+      setAlertModal({
+        isOpen: true,
+        title: 'Payroll Import Result',
+        message: message,
+        variant: results.failed > 0 ? 'warning' : 'success'
+      });
+
+      await Promise.all([fetchPayroll(), fetchPaymentHistory()]);
+    } catch (error) {
+      setAlertModal({
+        isOpen: true,
+        title: 'Payroll Import Failed',
+        message: error.response?.data?.message || 'Failed to import payroll. Please check the file format.',
+        variant: 'danger'
+      });
+    } finally {
+      setImporting(false);
+      if (payrollFileInputRef.current) payrollFileInputRef.current.value = '';
+    }
+  };
+
   return (
     <div className="space-y-6 mx-2">
       {/* Header */}
@@ -480,6 +549,13 @@ const Payroll = () => {
             accept=".xlsx, .xls"
             className="hidden"
           />
+          <input
+            type="file"
+            ref={payrollFileInputRef}
+            onChange={handlePayrollFileChange}
+            accept=".xlsx,.xls,.csv"
+            className="hidden"
+          />
           <Button
             onClick={handleExport}
             variant="secondary"
@@ -491,6 +567,13 @@ const Payroll = () => {
             loading={importing}
           >
             Import Payments (Excel)
+          </Button>
+          <Button
+            onClick={handlePayrollImportClick}
+            loading={importing}
+            variant="secondary"
+          >
+            Import Payroll (Excel/CSV)
           </Button>
         </div>
       </div>

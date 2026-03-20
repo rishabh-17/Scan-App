@@ -53,6 +53,15 @@ export const getStats = async () => {
   return response.data;
 };
 
+export const importPayroll = async (file) => {
+  const data = new FormData();
+  data.append('file', file);
+  const response = await api.post('/payroll/import', data, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return response.data;
+};
+
 // Bulk Upload APIs
 export const validateBulkUpload = async (rows) => {
   const response = await api.post('/scan-entry/bulk-validate', { rows });
