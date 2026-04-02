@@ -302,7 +302,7 @@ const Payroll = () => {
         'Mobile No': item.mobile || '',
         'Department': '',
         'Source': '',
-        'No of Days': '',
+        'No of Days': Number(item.noOfDays || 0),
         'Day Wise Pay': '',
         'Total Per Day Payment': '',
         'Inward Count': 0,

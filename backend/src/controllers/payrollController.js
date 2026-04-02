@@ -62,6 +62,11 @@ const getPayroll = async (req, res) => {
           center: '$operator.center',
         },
         totalScans: { $sum: '$scans' },
+        workedDays: {
+          $addToSet: {
+            $dateTrunc: { date: '$date', unit: 'day' },
+          },
+        },
       },
     });
 
@@ -84,6 +89,7 @@ const getPayroll = async (req, res) => {
             $group: {
               _id: null,
               totalPaid: { $sum: '$amount' },
+              lastPaymentDate: { $max: '$paymentDate' },
             },
           },
         ],
@@ -94,7 +100,30 @@ const getPayroll = async (req, res) => {
     pipeline.push({
       $addFields: {
         totalPaid: { $ifNull: [{ $arrayElemAt: ['$payments.totalPaid', 0] }, 0] },
+        lastPaymentDate: { $arrayElemAt: ['$payments.lastPaymentDate', 0] },
         totalAmount: { $multiply: ['$totalScans', '$_id.rate'] },
+        lastPaymentDay: {
+          $dateTrunc: {
+            date: { $ifNull: [{ $arrayElemAt: ['$payments.lastPaymentDate', 0] }, new Date(0)] },
+            unit: 'day',
+          },
+        },
+        noOfDays: {
+          $size: {
+            $filter: {
+              input: { $ifNull: ['$workedDays', []] },
+              as: 'd',
+              cond: {
+                $gt: ['$$d', {
+                  $dateTrunc: {
+                    date: { $ifNull: [{ $arrayElemAt: ['$payments.lastPaymentDate', 0] }, new Date(0)] },
+                    unit: 'day',
+                  },
+                }],
+              },
+            },
+          },
+        },
       },
     });
 
@@ -122,6 +151,7 @@ const getPayroll = async (req, res) => {
         panNumber: '$_id.panNumber',
         mobile: '$_id.mobile',
         center: '$_id.center',
+        noOfDays: 1,
         totalScans: 1,
         totalAmount: 1,
         totalPaid: 1,
