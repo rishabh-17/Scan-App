@@ -26,6 +26,7 @@ const Users = () => {
   });
   const [formData, setFormData] = useState({
     name: '',
+    employeeId: '',
     email: '',
     mobile: '',
     password: '',
@@ -68,7 +69,7 @@ const Users = () => {
       }
       setShowModal(false);
       setEditingUser(null);
-      setFormData({ name: '', email: '', mobile: '', password: '', role: 'center_supervisor', center: '', project: '', status: 'active' });
+      setFormData({ name: '', employeeId: '', email: '', mobile: '', password: '', role: 'center_supervisor', center: '', project: '', status: 'active' });
       fetchData();
       setAlertModal({
         isOpen: true,
@@ -93,6 +94,7 @@ const Users = () => {
     setEditingUser(user);
     setFormData({
       name: user.name,
+      employeeId: user.employeeId || '',
       email: user.email || '',
       mobile: user.mobile,
       password: '', // Don't populate password
@@ -168,7 +170,7 @@ const Users = () => {
           <button
             onClick={() => {
               setEditingUser(null);
-              setFormData({ name: '', email: '', mobile: '', password: '', role: 'center_supervisor', center: '', project: '', status: 'active' });
+              setFormData({ name: '', employeeId: '', email: '', mobile: '', password: '', role: 'center_supervisor', center: '', project: '', status: 'active' });
               setShowModal(true);
             }}
             className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition shadow-sm"
@@ -188,6 +190,7 @@ const Users = () => {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Username</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mobile</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -197,6 +200,7 @@ const Users = () => {
                 {users.map((user) => (
                   <tr key={user._id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{user.name}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.employeeId || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.mobile}</td>
                     <td className="px-6 py-4 whitespace-nowrap">{roleBadge(user.role)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -249,6 +253,17 @@ const Users = () => {
                     name="name"
                     required
                     value={formData.name}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                  <input
+                    type="text"
+                    name="employeeId"
+                    value={formData.employeeId}
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
                   />

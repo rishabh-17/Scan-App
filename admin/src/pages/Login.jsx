@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import compactLogo from '../assets/compact_logo.png';
 
 const Login = () => {
-  const [mobile, setMobile] = useState('');
+  const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -13,7 +13,7 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await login(mobile, password);
+      await login(loginId, password);
       navigate('/');
     } catch {
       setError('Invalid credentials');
@@ -34,17 +34,17 @@ const Login = () => {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Mobile */}
+          {/* Username / Mobile */}
           <div>
             <label className="block text-sm font-medium text-gray-700">
-              Mobile
+              Username / Mobile
             </label>
             <input
               type="text"
-              placeholder="Enter mobile number"
+              placeholder="Enter username or mobile number"
               className="w-full mt-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
-              value={mobile}
-              onChange={(e) => setMobile(e.target.value)}
+              value={loginId}
+              onChange={(e) => setLoginId(e.target.value)}
             />
           </div>
 

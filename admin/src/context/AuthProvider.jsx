@@ -23,8 +23,8 @@ export const AuthProvider = ({ children }) => {
     checkUser();
   }, []);
 
-  const login = async (mobile, password) => {
-    const { data } = await api.post('/auth/login', { mobile, password });
+  const login = async (loginId, password) => {
+    const { data } = await api.post('/auth/login', { loginId, password });
     localStorage.setItem('token', data.token);
     setUser(data);
     return data;
@@ -48,4 +48,3 @@ export const AuthProvider = ({ children }) => {
     </AuthContext.Provider>
   );
 };
-

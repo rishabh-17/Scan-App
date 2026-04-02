@@ -182,10 +182,17 @@ const registerStaff = async (req, res) => {
 // @route   POST /api/auth/login
 // @access  Public
 const loginStaff = async (req, res) => {
-  const { mobile, password } = req.body;
+  const loginIdRaw = req.body.loginId ?? req.body.mobile ?? req.body.username ?? '';
+  const password = req.body.password;
+  const loginId = String(loginIdRaw).trim();
 
-  // Check for staff mobile
-  const staff = await Staff.findOne({ mobile }).populate('project', 'name');
+  if (!loginId || !password) {
+    return res.status(400).json({ message: 'Invalid credentials' });
+  }
+
+  const staff = await Staff.findOne({
+    $or: [{ mobile: loginId }, { employeeId: loginId }],
+  }).populate('project', 'name');
 
   if (staff && (await bcrypt.compare(password, staff.password))) {
     if (staff.status !== 'active') {
@@ -195,6 +202,7 @@ const loginStaff = async (req, res) => {
     res.json({
       _id: staff.id,
       name: staff.name,
+      employeeId: staff.employeeId,
       mobile: staff.mobile,
       email: staff.email,
       dob: staff.dob,
