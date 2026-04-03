@@ -53,6 +53,7 @@ const getPayroll = async (req, res) => {
         _id: {
           operatorId: '$operatorId',
           operatorName: '$operator.name',
+          employeeId: '$operator.employeeId',
           projectId: '$projectId',
           projectName: '$project.name',
           rate: '$project.scanRate',
@@ -144,6 +145,7 @@ const getPayroll = async (req, res) => {
         _id: 0,
         operatorId: '$_id.operatorId',
         operatorName: '$_id.operatorName',
+        employeeId: '$_id.employeeId',
         projectId: '$_id.projectId',
         projectName: '$_id.projectName',
         rate: '$_id.rate',

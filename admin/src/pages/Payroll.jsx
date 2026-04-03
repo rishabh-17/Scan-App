@@ -297,7 +297,7 @@ const Payroll = () => {
 
       return {
         'S.No.': index + 1,
-        'User Id': item.operatorId || '',
+        'User Id': item.employeeId || item.operatorId || '',
         'User Name': item.operatorName || '',
         'Mobile No': item.mobile || '',
         'Department': '',

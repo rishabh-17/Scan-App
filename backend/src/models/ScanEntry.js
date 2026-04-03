@@ -60,4 +60,4 @@ const scanEntrySchema = new mongoose.Schema({
   timestamps: true,
 });
 
-module.exports = mongoose.model('ScanEntry', scanEntrySchema);
+module.exports = mongoose.model('ScanEntry', scanEntrySchema, 'record');
