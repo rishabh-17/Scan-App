@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const Staff = require('../models/Staff');
 const Center = require('../models/Center');
+const Project = require('../models/Project');
 
 // Generate JWT
 const generateToken = (id) => {
@@ -44,6 +45,7 @@ const registerStaff = async (req, res) => {
     referenceContactNo,
     bankDetails,
     center,
+    project,
     password
   } = req.body;
 
@@ -62,6 +64,26 @@ const registerStaff = async (req, res) => {
       return res.status(400).json({ message: 'Invalid Center Code' });
     }
     centerId = centerObj._id;
+  }
+
+  let projectId;
+  if (project) {
+    const projectRaw = String(project).trim();
+    const projectIsObjectId = /^[0-9a-fA-F]{24}$/.test(projectRaw);
+    const projectObj = projectIsObjectId
+      ? await Project.findById(projectRaw).select('_id centers isActive')
+      : await Project.findOne({ projectCode: projectRaw }).select('_id centers isActive');
+
+    if (!projectObj || projectObj.isActive === false) {
+      return res.status(400).json({ message: 'Invalid Project' });
+    }
+    if (Array.isArray(projectObj.centers) && projectObj.centers.length > 0) {
+      const centerAllowed = projectObj.centers.some((c) => c && c.toString() === centerId.toString());
+      if (!centerAllowed) {
+        return res.status(400).json({ message: 'Project does not belong to selected center' });
+      }
+    }
+    projectId = projectObj._id;
   }
 
   // Validations
@@ -136,6 +158,7 @@ const registerStaff = async (req, res) => {
     dob,
     password: hashedPassword,
     center: centerId,
+    project: projectId,
     role: 'staff', // Force role to staff for self-registration
     status: 'pending', // Explicitly set pending status
     address: address || '',

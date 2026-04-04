@@ -13,6 +13,7 @@ import Centers from './pages/Centers';
 import ApprovalDashboard from './pages/ApprovalDashboard';
 import RateCharts from './pages/RateCharts';
 import WorkUpload from './pages/WorkUpload';
+import StaffRegister from './pages/StaffRegister';
 import Layout from './components/Layout';
 
 const ProtectedRoute = ({ children }) => {
@@ -29,6 +30,7 @@ function App() {
       <Router>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/staff-register" element={<StaffRegister />} />
           <Route path="/" element={
             <ProtectedRoute>
               <Layout>

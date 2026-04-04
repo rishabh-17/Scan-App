@@ -1,5 +1,21 @@
 const Project = require('../models/Project');
 
+const getPublicProjects = async (req, res) => {
+  try {
+    const { center } = req.query;
+
+    const query = { isActive: { $ne: false } };
+    if (center && /^[0-9a-fA-F]{24}$/.test(String(center))) {
+      query.centers = center;
+    }
+
+    const projects = await Project.find(query).select('name projectCode centers _id');
+    res.json(projects);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 // @desc    Create a new project
 // @route   POST /api/projects
 // @access  Private (Admin)
@@ -116,6 +132,7 @@ const deleteProject = async (req, res) => {
 module.exports = {
   createProject,
   getProjects,
+  getPublicProjects,
   updateProject,
   deleteProject,
 };

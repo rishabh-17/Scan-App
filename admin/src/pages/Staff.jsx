@@ -25,6 +25,10 @@ const Staff = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [linkCenter, setLinkCenter] = useState('');
+  const [linkProject, setLinkProject] = useState('');
+  const [generatedLink, setGeneratedLink] = useState('');
   const importInputRef = useRef(null);
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
@@ -383,6 +387,55 @@ const Staff = () => {
     })
     : [];
 
+  const linkFilteredProjects = linkCenter
+    ? projects.filter(p => {
+      if (p.centers && Array.isArray(p.centers)) {
+        return p.centers.some(c => {
+          if (!c) return false;
+          const cId = typeof c === 'object' ? c._id : c;
+          return cId === linkCenter;
+        });
+      }
+      if (p.center) {
+        const projectCenterId = typeof p.center === 'object' ? p.center._id : p.center;
+        return projectCenterId === linkCenter;
+      }
+      return false;
+    })
+    : [];
+
+  const createRegistrationLink = () => {
+    if (!linkCenter || !linkProject) return;
+    const centerObj = centers.find((c) => c._id === linkCenter);
+    const projectObj = projects.find((p) => p._id === linkProject);
+
+    const centerParam = centerObj?.centerCode || linkCenter;
+    const projectParam = projectObj?.projectCode || linkProject;
+
+    const link = `${window.location.origin}/staff-register?center=${encodeURIComponent(centerParam)}&project=${encodeURIComponent(projectParam)}`;
+    setGeneratedLink(link);
+  };
+
+  const copyRegistrationLink = async () => {
+    if (!generatedLink) return;
+    try {
+      await navigator.clipboard.writeText(generatedLink);
+      setAlertModal({
+        isOpen: true,
+        title: 'Copied',
+        message: 'Registration link copied to clipboard',
+        variant: 'success'
+      });
+    } catch {
+      setAlertModal({
+        isOpen: true,
+        title: 'Copy Failed',
+        message: 'Unable to copy automatically. Please copy the link manually.',
+        variant: 'warning'
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -415,6 +468,18 @@ const Staff = () => {
             disabled={actionLoading}
           >
             Import Excel/CSV
+          </button>
+          <button
+            onClick={() => {
+              setShowLinkModal(true);
+              setLinkCenter('');
+              setLinkProject('');
+              setGeneratedLink('');
+            }}
+            className="bg-white text-gray-900 px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 hover:bg-gray-50 transition shadow-sm"
+            disabled={actionLoading}
+          >
+            Create Reg Link
           </button>
           <button
             onClick={handleAddClick}
@@ -858,6 +923,99 @@ const Staff = () => {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showLinkModal && (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 w-full max-w-xl p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Create Staff Registration Link</h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Center</label>
+                <select
+                  value={linkCenter}
+                  onChange={(e) => {
+                    setLinkCenter(e.target.value);
+                    setLinkProject('');
+                    setGeneratedLink('');
+                  }}
+                  className="w-full mt-1 px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">Select Center</option>
+                  {centers.map((center) => (
+                    <option key={center._id} value={center._id}>
+                      {center.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Project</label>
+                <select
+                  value={linkProject}
+                  onChange={(e) => {
+                    setLinkProject(e.target.value);
+                    setGeneratedLink('');
+                  }}
+                  className="w-full mt-1 px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  disabled={!linkCenter}
+                >
+                  <option value="">{linkCenter ? 'Select Project' : 'Select Center first'}</option>
+                  {linkFilteredProjects.map((project) => (
+                    <option key={project._id} value={project._id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowLinkModal(false);
+                    setLinkCenter('');
+                    setLinkProject('');
+                    setGeneratedLink('');
+                  }}
+                  className="bg-white text-gray-900 px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 hover:bg-gray-50 transition shadow-sm"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={createRegistrationLink}
+                  disabled={!linkCenter || !linkProject}
+                  className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition shadow-sm disabled:opacity-60"
+                >
+                  Generate
+                </button>
+              </div>
+
+              {generatedLink && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <input
+                      type="text"
+                      value={generatedLink}
+                      readOnly
+                      className="w-full bg-white px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={copyRegistrationLink}
+                      className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-black transition shadow-sm"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
