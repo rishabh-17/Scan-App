@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getStats, getPendingEntries, approveEntry, rejectEntry } from '../services/api';
+import { getStats, getPendingEntries, approveEntry, rejectEntry, getProjects, getCenters } from '../services/api';
 import Button from '../components/Button';
 import Loader from '../components/Loader';
 import ConfirmModal from '../components/ConfirmModal';
@@ -15,6 +15,13 @@ const ApprovalDashboard = () => {
     rejectedCount: 0
   });
   const [pendingWork, setPendingWork] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [centers, setCenters] = useState([]);
+  const [filters, setFilters] = useState({
+    projectId: '',
+    centerId: '',
+    activityType: ''
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -30,23 +37,57 @@ const ApprovalDashboard = () => {
   const [rejectReason, setRejectReason] = useState('');
 
   useEffect(() => {
-    fetchData();
+    const run = async () => {
+      try {
+        setLoading(true);
+        const [statsData, projectsData, centersData] = await Promise.all([
+          getStats(),
+          getProjects(),
+          getCenters()
+        ]);
+        setStats(statsData);
+        setProjects(Array.isArray(projectsData) ? projectsData : []);
+        setCenters(Array.isArray(centersData) ? centersData : []);
+      } catch (err) {
+        console.error('Error fetching dashboard data:', err);
+        setError('Failed to load dashboard data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    run();
   }, []);
 
-  const fetchData = async () => {
+  useEffect(() => {
+    const run = async () => {
+      try {
+        setLoading(true);
+        const pendingData = await getPendingEntries({
+          type: 'all',
+          ...(filters.projectId ? { projectId: filters.projectId } : {}),
+          ...(filters.centerId ? { centerId: filters.centerId } : {}),
+          ...(filters.activityType ? { activityType: filters.activityType } : {})
+        });
+        setPendingWork(Array.isArray(pendingData) ? pendingData : []);
+        setSelectedIds(new Set());
+      } catch (err) {
+        console.error('Error fetching entries:', err);
+        setError('Failed to load entries');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    run();
+  }, [filters.projectId, filters.centerId, filters.activityType]);
+
+  const fetchStats = async () => {
     try {
-      setLoading(true);
-      const [statsData, pendingData] = await Promise.all([
-        getStats(),
-        getPendingEntries() // Fetch pending entries list
-      ]);
+      const statsData = await getStats();
       setStats(statsData);
-      setPendingWork(pendingData);
     } catch (err) {
       console.error('Error fetching dashboard data:', err);
-      setError('Failed to load dashboard data');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -56,7 +97,7 @@ const ApprovalDashboard = () => {
       // Use generic approval (no level needed)
       await approveEntry(id);
       // Refresh data
-      await fetchData();
+      await fetchStats();
     } catch (err) {
       console.error('Approval failed:', err);
       setAlertConfig({
@@ -70,37 +111,46 @@ const ApprovalDashboard = () => {
   };
 
   const openBulkApproveConfirm = () => {
+    const selectedApprovableIds = pendingWork
+      .filter(e => selectedIds.has(e._id) && canApprove(e))
+      .map(e => e._id);
+
     setConfirmConfig({
       isOpen: true,
       title: 'Approve Selected',
-      message: `Are you sure you want to approve ${selectedIds.size} entries?`,
-      onConfirm: handleBulkApprove,
+      message: `Are you sure you want to approve ${selectedApprovableIds.length} entries?`,
+      onConfirm: () => handleBulkApprove(selectedApprovableIds),
       confirmVariant: 'success'
     });
   };
 
-  const handleBulkApprove = async () => {
+  const handleBulkApprove = async (ids) => {
     setActionLoading(true);
     try {
       await Promise.all(
-        Array.from(selectedIds).map(id => approveEntry(id))
+        ids.map(id => approveEntry(id))
       );
       setSelectedIds(new Set());
-      await fetchData();
+      await fetchStats();
       setConfirmConfig({ ...confirmConfig, isOpen: false });
       setAlertConfig({ isOpen: true, title: 'Success', message: 'Selected entries approved successfully', variant: 'success' });
     } catch (err) {
       console.error('Bulk approval failed:', err);
       setConfirmConfig({ ...confirmConfig, isOpen: false });
       setAlertConfig({ isOpen: true, title: 'Error', message: 'Some approvals failed. Please check the list.' });
-      fetchData();
+      fetchStats();
     } finally {
       setActionLoading(false);
     }
   };
 
   const openRejectModal = (ids) => {
-    setRejectModal({ isOpen: true, ids: Array.isArray(ids) ? ids : [ids] });
+    const idsArray = Array.isArray(ids) ? ids : [ids];
+    const rejectableIds = pendingWork
+      .filter(e => idsArray.includes(e._id) && canReject(e))
+      .map(e => e._id);
+
+    setRejectModal({ isOpen: true, ids: rejectableIds });
     setRejectReason('');
   };
 
@@ -110,6 +160,16 @@ const ApprovalDashboard = () => {
         isOpen: true,
         title: 'Validation Error',
         message: 'Please enter a rejection reason',
+        variant: 'danger'
+      });
+      return;
+    }
+
+    if (rejectModal.ids.length === 0) {
+      setAlertConfig({
+        isOpen: true,
+        title: 'Validation Error',
+        message: 'No rejectable records selected',
         variant: 'danger'
       });
       return;
@@ -132,7 +192,7 @@ const ApprovalDashboard = () => {
       }
 
       setRejectModal({ isOpen: false, ids: [] });
-      await fetchData();
+      await fetchStats();
     } catch (err) {
       console.error('Rejection failed:', err);
       setAlertConfig({
@@ -140,17 +200,22 @@ const ApprovalDashboard = () => {
         title: 'Rejection Failed',
         message: err.response?.data?.message || err.message
       });
-      fetchData();
+      fetchStats();
     } finally {
       setActionLoading(false);
     }
   };
 
+  const canApprove = (entry) => entry.actions?.includes('APPROVE');
+  const canReject = (entry) => entry.actions?.includes('REJECT');
+  const canSelect = (entry) => canApprove(entry) || canReject(entry);
+
   const toggleSelectAll = () => {
-    if (selectedIds.size === pendingWork.length) {
+    const selectableIds = pendingWork.filter(canSelect).map(e => e._id);
+    if (selectedIds.size === selectableIds.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(pendingWork.map(e => e._id)));
+      setSelectedIds(new Set(selectableIds));
     }
   };
 
@@ -217,10 +282,59 @@ const ApprovalDashboard = () => {
         </div>
       )}
 
-      {/* Pending Work Table */}
+      {/* Filters */}
+      <div className="bg-white rounded shadow p-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Project</label>
+            <select
+              value={filters.projectId}
+              onChange={(e) => setFilters(prev => ({ ...prev, projectId: e.target.value }))}
+              className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+            >
+              <option value="">All Projects</option>
+              {projects.map(p => (
+                <option key={p._id} value={p._id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+            <select
+              value={filters.centerId}
+              onChange={(e) => setFilters(prev => ({ ...prev, centerId: e.target.value }))}
+              className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+            >
+              <option value="">All Locations</option>
+              {centers.map(c => (
+                <option key={c._id} value={c._id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Activity</label>
+            <select
+              value={filters.activityType}
+              onChange={(e) => setFilters(prev => ({ ...prev, activityType: e.target.value }))}
+              className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+            >
+              <option value="">All Activities</option>
+              <option value="Scanning">Scanning</option>
+              <option value="QC">QC</option>
+              <option value="Outward">Outward</option>
+              <option value="Sticker">Sticker</option>
+              <option value="Inward">Inward</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Records Table */}
       <div className="bg-white rounded shadow overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-800">Pending Approvals</h2>
+          <h2 className="text-lg font-semibold text-gray-800">Records</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -229,7 +343,7 @@ const ApprovalDashboard = () => {
                 <th className="px-6 py-3 text-left">
                   <input
                     type="checkbox"
-                    checked={pendingWork.length > 0 && selectedIds.size === pendingWork.length}
+                    checked={pendingWork.some(canSelect) && selectedIds.size === pendingWork.filter(canSelect).length}
                     onChange={toggleSelectAll}
                     className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                   />
@@ -247,7 +361,7 @@ const ApprovalDashboard = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {pendingWork.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="px-6 py-4 text-center text-gray-500">No pending work found.</td>
+                  <td colSpan="9" className="px-6 py-4 text-center text-gray-500">No records found.</td>
                 </tr>
               ) : (
                 pendingWork.map((entry) => (
@@ -256,6 +370,7 @@ const ApprovalDashboard = () => {
                       <input
                         type="checkbox"
                         checked={selectedIds.has(entry._id)}
+                        disabled={!canSelect(entry)}
                         onChange={() => toggleSelect(entry._id)}
                         className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                       />
@@ -289,12 +404,12 @@ const ApprovalDashboard = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2">
                         <Button
-                          onClick={() => handleApprove(entry._id, entry.status)}
+                          onClick={() => handleApprove(entry._id)}
                           variant="success"
                           size="sm"
                           className="py-1 px-3 text-xs"
                           loading={processingId === entry._id}
-                          disabled={processingId !== null}
+                          disabled={processingId !== null || !canApprove(entry)}
                         >
                           Approve
                         </Button>
@@ -303,7 +418,7 @@ const ApprovalDashboard = () => {
                           variant="danger"
                           size="sm"
                           className="py-1 px-3 text-xs"
-                          disabled={processingId !== null}
+                          disabled={processingId !== null || !canReject(entry)}
                         >
                           Reject
                         </Button>

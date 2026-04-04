@@ -26,7 +26,11 @@ const Dashboard = () => {
   const fetchEntries = useCallback(async () => {
     setLoading(true);
     try {
-      const endpoint = activeTab === 'pending' ? '/scan-entry/pending' : '/scan-entry/pending?type=approved';
+      const endpoint = activeTab === 'pending'
+        ? '/scan-entry/pending'
+        : activeTab === 'approved'
+          ? '/scan-entry/pending?type=approved'
+          : '/scan-entry/pending?type=rejected';
       const response = await api.get(endpoint);
       setEntries(response.data);
     } catch {
@@ -61,20 +65,24 @@ const Dashboard = () => {
   };
 
   const openBulkApproveConfirm = () => {
+    const selectedApprovableIds = entries
+      .filter(e => selectedIds.has(e._id) && canApprove(e))
+      .map(e => e._id);
+
     setConfirmConfig({
       isOpen: true,
       title: 'Approve Selected',
-      message: `Are you sure you want to approve ${selectedIds.size} entries?`,
-      onConfirm: handleBulkApprove,
+      message: `Are you sure you want to approve ${selectedApprovableIds.length} entries?`,
+      onConfirm: () => handleBulkApprove(selectedApprovableIds),
       confirmVariant: 'success'
     });
   };
 
-  const handleBulkApprove = async () => {
+  const handleBulkApprove = async (ids) => {
     setActionLoading(true);
     try {
       await Promise.all(
-        Array.from(selectedIds).map(id => api.put(`/scan-entry/${id}/approve`))
+        ids.map(id => api.put(`/scan-entry/${id}/approve`))
       );
       setSelectedIds(new Set());
       await fetchEntries();
@@ -90,7 +98,12 @@ const Dashboard = () => {
   };
 
   const openRejectModal = (ids) => {
-    setRejectModal({ isOpen: true, ids: Array.isArray(ids) ? ids : [ids] });
+    const idsArray = Array.isArray(ids) ? ids : [ids];
+    const rejectableIds = entries
+      .filter(e => idsArray.includes(e._id) && canReject(e))
+      .map(e => e._id);
+
+    setRejectModal({ isOpen: true, ids: rejectableIds });
     setRejectReason('');
   };
 
@@ -100,6 +113,16 @@ const Dashboard = () => {
         isOpen: true,
         title: 'Validation Error',
         message: 'Please enter a rejection reason',
+        variant: 'danger'
+      });
+      return;
+    }
+
+    if (rejectModal.ids.length === 0) {
+      setAlertConfig({
+        isOpen: true,
+        title: 'Validation Error',
+        message: 'No rejectable entries selected',
         variant: 'danger'
       });
       return;
@@ -139,14 +162,18 @@ const Dashboard = () => {
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === entries.length) {
+    const selectableIds = entries.filter(canSelect).map(e => e._id);
+    if (selectedIds.size === selectableIds.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(entries.map(e => e._id)));
+      setSelectedIds(new Set(selectableIds));
     }
   };
 
   const toggleSelect = (id) => {
+    const entry = entries.find(e => e._id === id);
+    if (!entry || !canSelect(entry)) return;
+
     const newSelected = new Set(selectedIds);
     if (newSelected.has(id)) {
       newSelected.delete(id);
@@ -169,6 +196,8 @@ const Dashboard = () => {
     return entry.actions?.includes('REJECT');
   };
 
+  const canSelect = (entry) => canApprove(entry) || canReject(entry);
+
   const getStatusBadge = (status) => {
     const base = "px-2.5 py-1 text-xs font-medium rounded-full capitalize";
     if (status === 'entered') return `${base} bg-yellow-50 text-yellow-700`;
@@ -183,12 +212,14 @@ const Dashboard = () => {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">
-            {activeTab === 'pending' ? 'Pending Approvals' : 'Approved Entries'}
+            {activeTab === 'pending' ? 'Pending Approvals' : activeTab === 'approved' ? 'Approved Entries' : 'Rejected Entries'}
           </h1>
           <p className="text-sm text-gray-500 mt-1">
             {activeTab === 'pending'
               ? 'Review and approve scan entries across workflow stages'
-              : 'View history of approved and completed entries'}
+              : activeTab === 'approved'
+                ? 'View history of approved and completed entries'
+                : 'View history of rejected entries'}
           </p>
         </div>
 
@@ -211,6 +242,15 @@ const Dashboard = () => {
               }`}
           >
             Approved
+          </button>
+          <button
+            onClick={() => setActiveTab('rejected')}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'rejected'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-900'
+              }`}
+          >
+            Rejected
           </button>
         </div>
       </div>
@@ -253,7 +293,7 @@ const Dashboard = () => {
                   <th className="px-6 py-3 text-left">
                     <input
                       type="checkbox"
-                      checked={entries.length > 0 && selectedIds.size === entries.length}
+                      checked={entries.some(canSelect) && selectedIds.size === entries.filter(canSelect).length}
                       onChange={toggleSelectAll}
                       className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                     />
@@ -274,6 +314,7 @@ const Dashboard = () => {
                       <input
                         type="checkbox"
                         checked={selectedIds.has(entry._id)}
+                        disabled={!canSelect(entry)}
                         onChange={() => toggleSelect(entry._id)}
                         className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                       />
@@ -333,7 +374,7 @@ const Dashboard = () => {
                 {entries.length === 0 && (
                   <tr>
                     <td colSpan="7" className="py-12 text-center text-gray-500">
-                      {activeTab === 'pending' ? 'No pending approvals found' : 'No approved entries found'}
+                      {activeTab === 'pending' ? 'No pending approvals found' : activeTab === 'approved' ? 'No approved entries found' : 'No rejected entries found'}
                     </td>
                   </tr>
                 )}

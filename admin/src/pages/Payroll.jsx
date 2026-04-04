@@ -287,6 +287,10 @@ const Payroll = () => {
       'Account No',
       'Bank',
       'ISFC Code',
+      'TDS',
+      'Net Amount (Amount-TDS)',
+      'Remarks1',
+      'Remarks2',
     ];
 
     const exportRows = payrollData.map((item, index) => {
@@ -326,6 +330,10 @@ const Payroll = () => {
         'Account No': bankDetails.accountNo || '',
         'Bank': bankDetails.bankName || '',
         'ISFC Code': bankDetails.ifscCode || '',
+        'TDS': 0,
+        'Net Amount (Amount-TDS)': totalPay,
+        'Remarks1': '',
+        'Remarks2': '',
       };
     });
 

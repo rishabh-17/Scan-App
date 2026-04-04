@@ -78,6 +78,8 @@ const Staff = () => {
   const downloadImportTemplate = () => {
     const headers = [
       'S.No',
+      'Employee ID',
+      'Centre ID',
       'Location',
       'Name',
       'Gender',

@@ -366,6 +366,10 @@ const importStaff = async (req, res) => {
 
         const headerKeyMap = {
             sno: 'sNo',
+            employeeid: 'employeeId',
+            empid: 'employeeId',
+            centreid: 'centerId',
+            centerid: 'centerId',
             location: 'location',
             name: 'name',
             gender: 'gender',
@@ -453,6 +457,7 @@ const importStaff = async (req, res) => {
             const name = toText(r.name);
             const mobile = digitsOnly(r.mobile);
             const alternateMobile = digitsOnly(r.alternateMobile);
+            const employeeIdText = toText(r.employeeId);
 
             if (!name || !mobile || !alternateMobile) {
                 failures.push({ rowNumber, reason: 'Missing required fields (Name, Mobile No, Alternate Number)' });
@@ -460,10 +465,13 @@ const importStaff = async (req, res) => {
             }
 
             const locationText = toText(r.location);
-            const centerId = locationText ? centerLookup.get(normalizeHeader(locationText)) : undefined;
+            const centerRaw = toText(r.centerId);
+            const centerId = /^[0-9a-fA-F]{24}$/.test(centerRaw)
+                ? centerRaw
+                : (centerRaw ? centerLookup.get(normalizeHeader(centerRaw)) : (locationText ? centerLookup.get(normalizeHeader(locationText)) : undefined));
 
             if (allowedCenterIds && !centerId) {
-                failures.push({ rowNumber, reason: 'Location does not match an assigned center' });
+                failures.push({ rowNumber, reason: 'Centre ID/Location does not match an assigned center' });
                 continue;
             }
 
@@ -486,6 +494,7 @@ const importStaff = async (req, res) => {
                 alternateMobile,
                 email: toText(r.email) || undefined,
                 location: locationText || undefined,
+                employeeId: employeeIdText || undefined,
                 gender: toText(r.gender) || undefined,
                 fatherName: toText(r.fatherName) || undefined,
                 motherName: toText(r.motherName) || undefined,
@@ -536,7 +545,7 @@ const importStaff = async (req, res) => {
                 ...patch,
                 role: 'staff',
                 status: 'pending',
-                employeeId: `IMP-${mobile}`,
+                employeeId: employeeIdText || `IMP-${mobile}`,
                 password: defaultPasswordHash,
             });
 

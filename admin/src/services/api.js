@@ -43,8 +43,13 @@ export const rejectEntry = async (id, reason) => {
   return response.data;
 };
 
-export const getPendingEntries = async (type) => {
-  const response = await api.get(`/scan-entry/pending${type ? `?type=${type}` : ''}`);
+export const getPendingEntries = async (typeOrParams) => {
+  if (typeof typeOrParams === 'string') {
+    const response = await api.get(`/scan-entry/pending${typeOrParams ? `?type=${typeOrParams}` : ''}`);
+    return response.data;
+  }
+
+  const response = await api.get('/scan-entry/pending', { params: typeOrParams });
   return response.data;
 };
 

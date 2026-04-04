@@ -1,4 +1,5 @@
 const Project = require('../models/Project');
+const Center = require('../models/Center');
 
 const getPublicProjects = async (req, res) => {
   try {
@@ -48,15 +49,21 @@ const getProjects = async (req, res) => {
   try {
     let query = {};
 
-    // RBAC: Project Managers only see their assigned projects
-    if (req.user && req.user.role === 'project_manager') {
-      if (req.user.project) {
-        // New way: Assigned via User.project
-        query._id = req.user.project;
+    // RBAC: Center Supervisors only see projects for their assigned centers
+    if (req.user && req.user.role === 'center_supervisor') {
+      let centerIds = [];
+      if (req.user.center) {
+        centerIds = [req.user.center];
       } else {
-        // Legacy way: Assigned via Project.managers
-        query.managers = req.user._id;
+        const centers = await Center.find({ supervisors: req.user._id }).select('_id').lean();
+        centerIds = centers.map(c => c._id);
       }
+
+      if (centerIds.length === 0) {
+        return res.json([]);
+      }
+
+      query.centers = { $in: centerIds };
     }
 
     const projects = await Project.find(query)

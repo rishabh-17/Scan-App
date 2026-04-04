@@ -223,10 +223,36 @@ const rejectEntry = async (req, res) => {
 // Get entries (pending or approved)
 const getPendingEntries = async (req, res) => {
   try {
-    const { type } = req.query;
+    const { type, projectId, centerId, locationId, activityType } = req.query;
     let query = {};
 
-    if (type === 'approved') {
+    const isManagerView = ['admin', 'project_manager', 'finance_hr'].includes(req.user.role);
+    const wantsAll = type === 'all';
+    const isCenterSupervisor = req.user.role === 'center_supervisor';
+
+    let allowedCenterIds;
+    if (isCenterSupervisor) {
+      if (req.user.center) {
+        allowedCenterIds = [req.user.center];
+      } else {
+        const centers = await Center.find({ supervisors: req.user._id }).select('_id').lean();
+        allowedCenterIds = centers.map(c => c._id);
+      }
+    }
+
+    if (wantsAll && isManagerView) {
+      query = {};
+    } else if (type === 'rejected') {
+      query = { status: 'rejected' };
+
+      if (isCenterSupervisor) {
+        if (!allowedCenterIds || allowedCenterIds.length === 0) {
+          return res.json([]);
+        }
+
+        query.centerId = allowedCenterIds.length === 1 ? allowedCenterIds[0] : { $in: allowedCenterIds };
+      }
+    } else if (type === 'approved') {
       // Show entries that have been approved by this role
       if (req.user.role === 'admin') {
         const finalStates = Object.entries(workflowConfig.states)
@@ -256,19 +282,12 @@ const getPendingEntries = async (req, res) => {
         query.status = { $nin: finalStates };
       } else {
         // Filter by Assigned Scope
-        if (req.user.role === 'center_supervisor') {
-          if (req.user.center) {
-            query.centerId = req.user.center;
-          } else {
-            // Fallback: Check if assigned as supervisor in Center model
-            const centers = await Center.find({ supervisors: req.user._id });
-            if (centers.length > 0) {
-              const centerIds = centers.map(c => c._id);
-              query.centerId = { $in: centerIds };
-            } else {
-              return res.json([]);
-            }
+        if (isCenterSupervisor) {
+          if (!allowedCenterIds || allowedCenterIds.length === 0) {
+            return res.json([]);
           }
+
+          query.centerId = allowedCenterIds.length === 1 ? allowedCenterIds[0] : { $in: allowedCenterIds };
         } else if (req.user.role === 'project_manager') {
           if (req.user.project) {
             query.projectId = req.user.project;
@@ -294,9 +313,30 @@ const getPendingEntries = async (req, res) => {
       }
     }
 
+    if (projectId && /^[0-9a-fA-F]{24}$/.test(String(projectId))) {
+      query.projectId = projectId;
+    }
+
+    const effectiveCenterId = centerId || locationId;
+    if (effectiveCenterId && /^[0-9a-fA-F]{24}$/.test(String(effectiveCenterId))) {
+      if (isCenterSupervisor) {
+        const allowedSet = new Set((allowedCenterIds || []).map(id => String(id)));
+        if (!allowedSet.has(String(effectiveCenterId))) {
+          return res.json([]);
+        }
+      }
+
+      query.centerId = effectiveCenterId;
+    }
+
+    if (activityType) {
+      query.activityType = String(activityType);
+    }
+
     const entries = await ScanEntry.find(query)
       .populate('operatorId', 'name mobile')
       .populate('projectId', 'name centers')
+      .populate('centerId', 'name centerCode location')
       .sort({ date: -1 })
       .lean();
 
@@ -346,27 +386,7 @@ const getStats = async (req, res) => {
     let query = {};
 
     // RBAC: Scope to user's assigned projects/centers
-    if (req.user.role === 'project_manager') {
-      if (req.user.project) {
-        query.projectId = req.user.project;
-      } else {
-        // Fallback: Check if assigned as manager in Project model (Legacy)
-        const projects = await Project.find({ managers: req.user._id });
-        if (projects.length > 0) {
-          const projectIds = projects.map(p => p._id);
-          query.projectId = { $in: projectIds };
-        } else {
-          // No project assigned, return empty stats
-          return res.json({
-            totalUnits: 0,
-            totalAmount: 0,
-            pendingCount: 0,
-            approvedCount: 0,
-            rejectedCount: 0
-          });
-        }
-      }
-    } else if (req.user.role === 'center_supervisor') {
+    if (req.user.role === 'center_supervisor') {
       if (req.user.center) {
         query.centerId = req.user.center;
       } else {
