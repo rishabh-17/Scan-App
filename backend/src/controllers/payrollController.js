@@ -4,6 +4,19 @@ const Staff = require('../models/Staff');
 const Payment = require('../models/Payment');
 const XLSX = require('xlsx');
 
+const ACTIVITY_MATCHERS = {
+  SCAN: ['SCAN', 'Scanning'],
+  QC: ['QC'],
+  Sticker: ['Sticker', 'Stickering'],
+  Inward: ['Inward'],
+  Outward: ['Outward'],
+  Day: ['Day', 'Day Wise', 'DayWise'],
+  Training: ['Training'],
+  Referral: ['Referral'],
+  Misc: ['Misc'],
+  Others: ['Others'],
+};
+
 // @desc    Get payroll report
 // @route   GET /api/payroll
 // @access  Private (Admin)
@@ -62,7 +75,28 @@ const getPayroll = async (req, res) => {
           mobile: '$operator.mobile',
           center: '$operator.center',
         },
+        scanUnits: { $sum: { $cond: [{ $in: ['$activityType', ACTIVITY_MATCHERS.SCAN] }, '$scans', 0] } },
+        scanAmount: { $sum: { $cond: [{ $in: ['$activityType', ACTIVITY_MATCHERS.SCAN] }, '$amount', 0] } },
+        qcUnits: { $sum: { $cond: [{ $in: ['$activityType', ACTIVITY_MATCHERS.QC] }, '$scans', 0] } },
+        qcAmount: { $sum: { $cond: [{ $in: ['$activityType', ACTIVITY_MATCHERS.QC] }, '$amount', 0] } },
+        stickerUnits: { $sum: { $cond: [{ $in: ['$activityType', ACTIVITY_MATCHERS.Sticker] }, '$scans', 0] } },
+        stickerAmount: { $sum: { $cond: [{ $in: ['$activityType', ACTIVITY_MATCHERS.Sticker] }, '$amount', 0] } },
+        inwardUnits: { $sum: { $cond: [{ $in: ['$activityType', ACTIVITY_MATCHERS.Inward] }, '$scans', 0] } },
+        inwardAmount: { $sum: { $cond: [{ $in: ['$activityType', ACTIVITY_MATCHERS.Inward] }, '$amount', 0] } },
+        outwardUnits: { $sum: { $cond: [{ $in: ['$activityType', ACTIVITY_MATCHERS.Outward] }, '$scans', 0] } },
+        outwardAmount: { $sum: { $cond: [{ $in: ['$activityType', ACTIVITY_MATCHERS.Outward] }, '$amount', 0] } },
+        dayUnits: { $sum: { $cond: [{ $in: ['$activityType', ACTIVITY_MATCHERS.Day] }, '$scans', 0] } },
+        dayAmount: { $sum: { $cond: [{ $in: ['$activityType', ACTIVITY_MATCHERS.Day] }, '$amount', 0] } },
+        trainingUnits: { $sum: { $cond: [{ $in: ['$activityType', ACTIVITY_MATCHERS.Training] }, '$scans', 0] } },
+        trainingAmount: { $sum: { $cond: [{ $in: ['$activityType', ACTIVITY_MATCHERS.Training] }, '$amount', 0] } },
+        referralUnits: { $sum: { $cond: [{ $in: ['$activityType', ACTIVITY_MATCHERS.Referral] }, '$scans', 0] } },
+        referralAmount: { $sum: { $cond: [{ $in: ['$activityType', ACTIVITY_MATCHERS.Referral] }, '$amount', 0] } },
+        miscUnits: { $sum: { $cond: [{ $in: ['$activityType', ACTIVITY_MATCHERS.Misc] }, '$scans', 0] } },
+        miscAmount: { $sum: { $cond: [{ $in: ['$activityType', ACTIVITY_MATCHERS.Misc] }, '$amount', 0] } },
+        othersUnits: { $sum: { $cond: [{ $in: ['$activityType', ACTIVITY_MATCHERS.Others] }, '$scans', 0] } },
+        othersAmount: { $sum: { $cond: [{ $in: ['$activityType', ACTIVITY_MATCHERS.Others] }, '$amount', 0] } },
         totalScans: { $sum: '$scans' },
+        totalAmount: { $sum: '$amount' },
         workedDays: {
           $addToSet: {
             $dateTrunc: { date: '$date', unit: 'day' },
@@ -102,7 +136,6 @@ const getPayroll = async (req, res) => {
       $addFields: {
         totalPaid: { $ifNull: [{ $arrayElemAt: ['$payments.totalPaid', 0] }, 0] },
         lastPaymentDate: { $arrayElemAt: ['$payments.lastPaymentDate', 0] },
-        totalAmount: { $multiply: ['$totalScans', '$_id.rate'] },
         lastPaymentDay: {
           $dateTrunc: {
             date: { $ifNull: [{ $arrayElemAt: ['$payments.lastPaymentDate', 0] }, new Date(0)] },
@@ -154,6 +187,26 @@ const getPayroll = async (req, res) => {
         mobile: '$_id.mobile',
         center: '$_id.center',
         noOfDays: 1,
+        scanUnits: 1,
+        scanAmount: 1,
+        qcUnits: 1,
+        qcAmount: 1,
+        stickerUnits: 1,
+        stickerAmount: 1,
+        inwardUnits: 1,
+        inwardAmount: 1,
+        outwardUnits: 1,
+        outwardAmount: 1,
+        dayUnits: 1,
+        dayAmount: 1,
+        trainingUnits: 1,
+        trainingAmount: 1,
+        referralUnits: 1,
+        referralAmount: 1,
+        miscUnits: 1,
+        miscAmount: 1,
+        othersUnits: 1,
+        othersAmount: 1,
         totalScans: 1,
         totalAmount: 1,
         totalPaid: 1,

@@ -1,6 +1,57 @@
 const Project = require('../models/Project');
 const Center = require('../models/Center');
 
+const ACTIVITY_CATALOG = [
+  { name: 'Scanning', code: 'SCAN', aliases: ['Scanning', 'SCAN'] },
+  { name: 'QC', code: 'QC', aliases: ['QC'] },
+  { name: 'Stickering', code: 'Sticker', aliases: ['Stickering', 'Sticker'] },
+  { name: 'Inward', code: 'Inward', aliases: ['Inward'] },
+  { name: 'Outward', code: 'Outward', aliases: ['Outward'] },
+  { name: 'Day Wise', code: 'Day', aliases: ['Day Wise', 'Day', 'DayWise'] },
+  { name: 'Training', code: 'Training', aliases: ['Training'] },
+  { name: 'Referral', code: 'Referral', aliases: ['Referral'] },
+  { name: 'Misc', code: 'Misc', aliases: ['Misc'] },
+  { name: 'Others', code: 'Others', aliases: ['Others'] },
+];
+
+const normalizeActivityText = (value) => {
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, '');
+};
+
+const normalizeActivityType = (value) => {
+  const v = normalizeActivityText(value);
+  if (!v) return null;
+
+  for (const a of ACTIVITY_CATALOG) {
+    for (const alias of a.aliases) {
+      if (normalizeActivityText(alias) === v) return a.code;
+    }
+  }
+
+  return null;
+};
+
+const normalizeRateChart = (rateChart) => {
+  const items = Array.isArray(rateChart) ? rateChart : [];
+  const invalid = [];
+  const normalized = [];
+
+  for (const item of items) {
+    const code = normalizeActivityType(item?.activityName);
+    if (!code) {
+      invalid.push(item?.activityName);
+      continue;
+    }
+
+    normalized.push({
+      ...item,
+      activityName: code,
+    });
+  }
+
+  return { invalid, normalized };
+};
+
 const getPublicProjects = async (req, res) => {
   try {
     const { center } = req.query;
@@ -24,6 +75,11 @@ const createProject = async (req, res) => {
   const { name, clientName, projectCode, startDate, endDate, centers, scanRate, productivityLimit, managers, rateChart } = req.body;
 
   try {
+    const { invalid, normalized } = normalizeRateChart(rateChart);
+    if (invalid.length > 0) {
+      return res.status(400).json({ message: `Invalid activity in rate chart: ${invalid.filter(Boolean).join(', ') || '-'}` });
+    }
+
     const project = await Project.create({
       name,
       clientName,
@@ -34,7 +90,7 @@ const createProject = async (req, res) => {
       scanRate,
       productivityLimit,
       managers,
-      rateChart,
+      rateChart: normalized,
     });
     res.status(201).json(project);
   } catch (error) {
@@ -97,7 +153,11 @@ const updateProject = async (req, res) => {
         project.managers = req.body.managers;
       }
       if (req.body.rateChart) {
-        project.rateChart = req.body.rateChart;
+        const { invalid, normalized } = normalizeRateChart(req.body.rateChart);
+        if (invalid.length > 0) {
+          return res.status(400).json({ message: `Invalid activity in rate chart: ${invalid.filter(Boolean).join(', ') || '-'}` });
+        }
+        project.rateChart = normalized;
       }
 
       // Toggle active status if provided

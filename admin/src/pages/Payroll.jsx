@@ -296,8 +296,53 @@ const Payroll = () => {
     const exportRows = payrollData.map((item, index) => {
       const bankDetails = item.bankDetails || {};
       const totalPay = Number(item.pendingAmount || 0);
-      const scanRate = Number(item.rate || 0);
-      const scanCount = scanRate > 0 ? Math.round(totalPay / scanRate) : '';
+      const hasBreakdown = [
+        'scanUnits', 'scanAmount',
+        'qcUnits', 'qcAmount',
+        'stickerUnits', 'stickerAmount',
+        'inwardUnits', 'inwardAmount',
+        'outwardUnits', 'outwardAmount',
+        'dayUnits', 'dayAmount',
+        'trainingUnits', 'trainingAmount',
+        'referralUnits', 'referralAmount',
+        'miscUnits', 'miscAmount',
+        'othersUnits', 'othersAmount',
+      ].some(k => item?.[k] !== undefined);
+
+      const scanUnits = Number(item.scanUnits || 0);
+      const scanAmount = Number(item.scanAmount || 0);
+      const qcUnits = Number(item.qcUnits || 0);
+      const qcAmount = Number(item.qcAmount || 0);
+      const outwardUnits = Number(item.outwardUnits || 0);
+      const outwardAmount = Number(item.outwardAmount || 0);
+      const stickerUnits = Number(item.stickerUnits || 0);
+      const stickerAmount = Number(item.stickerAmount || 0);
+      const inwardUnits = Number(item.inwardUnits || 0);
+      const inwardAmount = Number(item.inwardAmount || 0);
+
+      const earnedTotalAmount = Number(item.totalAmount || 0);
+      const pendingFactor = earnedTotalAmount > 0 ? (totalPay / earnedTotalAmount) : 1;
+
+      const toScaledUnits = (n) => Math.round(Number(n || 0) * pendingFactor);
+      const toScaledAmount = (n) => Number((Number(n || 0) * pendingFactor).toFixed(2));
+
+      const scanUnitsPending = hasBreakdown ? toScaledUnits(scanUnits) : 0;
+      const scanAmountPending = hasBreakdown ? toScaledAmount(scanAmount) : 0;
+      const qcUnitsPending = hasBreakdown ? toScaledUnits(qcUnits) : 0;
+      const qcAmountPending = hasBreakdown ? toScaledAmount(qcAmount) : 0;
+      const outwardUnitsPending = hasBreakdown ? toScaledUnits(outwardUnits) : 0;
+      const outwardAmountPending = hasBreakdown ? toScaledAmount(outwardAmount) : 0;
+      const stickerUnitsPending = hasBreakdown ? toScaledUnits(stickerUnits) : 0;
+      const stickerAmountPending = hasBreakdown ? toScaledAmount(stickerAmount) : 0;
+      const inwardUnitsPending = hasBreakdown ? toScaledUnits(inwardUnits) : 0;
+      const inwardAmountPending = hasBreakdown ? toScaledAmount(inwardAmount) : 0;
+
+      const scanRate = (scanUnits > 0 && scanAmount > 0) ? (scanAmount / scanUnits) : Number(item.rate || 0);
+      const qcRate = (qcUnits > 0 && qcAmount > 0) ? (qcAmount / qcUnits) : 0;
+      const outwardRate = (outwardUnits > 0 && outwardAmount > 0) ? (outwardAmount / outwardUnits) : 0;
+      const stickerRate = (stickerUnits > 0 && stickerAmount > 0) ? (stickerAmount / stickerUnits) : 0;
+
+      const fallbackScanCount = scanRate > 0 ? Math.round(totalPay / scanRate) : '';
 
       return {
         'S.No.': index + 1,
@@ -309,20 +354,20 @@ const Payroll = () => {
         'No of Days': Number(item.noOfDays || 0),
         'Day Wise Pay': '',
         'Total Per Day Payment': '',
-        'Inward Count': 0,
-        'Inward payment': 0,
+        'Inward Count': hasBreakdown ? inwardUnitsPending : 0,
+        'Inward payment': hasBreakdown ? inwardAmountPending : 0,
         'Amount Per script Scan': scanRate,
-        'Scan Count': scanCount,
-        'Scanning total Amount': totalPay,
-        'Qc Amount Per script': 0,
-        'Qc Count': 0,
-        'QC total Amount': 0,
-        'Outward Amount Per script': 0,
-        'Outward Count': 0,
-        'Outward total Amount': 0,
-        'Sticker Amount Per script': 0,
-        'Sticker Count': 0,
-        'Sticker Total Amount': 0,
+        'Scan Count': hasBreakdown ? scanUnitsPending : fallbackScanCount,
+        'Scanning total Amount': hasBreakdown ? scanAmountPending : totalPay,
+        'Qc Amount Per script': hasBreakdown ? qcRate : 0,
+        'Qc Count': hasBreakdown ? qcUnitsPending : 0,
+        'QC total Amount': hasBreakdown ? qcAmountPending : 0,
+        'Outward Amount Per script': hasBreakdown ? outwardRate : 0,
+        'Outward Count': hasBreakdown ? outwardUnitsPending : 0,
+        'Outward total Amount': hasBreakdown ? outwardAmountPending : 0,
+        'Sticker Amount Per script': hasBreakdown ? stickerRate : 0,
+        'Sticker Count': hasBreakdown ? stickerUnitsPending : 0,
+        'Sticker Total Amount': hasBreakdown ? stickerAmountPending : 0,
         'Total Pay= (I+N+Q+T+W)': totalPay,
         'Status Pay/Hold': 'Pay',
         'Aadhar Card Number': '',

@@ -210,6 +210,28 @@ const ApprovalDashboard = () => {
   const canReject = (entry) => entry.actions?.includes('REJECT');
   const canSelect = (entry) => canApprove(entry) || canReject(entry);
 
+  const formatActivity = (value) => {
+    const v = String(value || '').trim();
+    if (!v) return '';
+    const map = {
+      SCAN: 'Scanning',
+      QC: 'QC',
+      Sticker: 'Stickering',
+      Inward: 'Inward',
+      Outward: 'Outward',
+      Day: 'Day Wise',
+      Training: 'Training',
+      Referral: 'Referral',
+      Misc: 'Misc',
+      Others: 'Others',
+      Scanning: 'Scanning',
+      Stickering: 'Stickering',
+      'Day Wise': 'Day Wise',
+      DayWise: 'Day Wise',
+    };
+    return map[v] || v;
+  };
+
   const toggleSelectAll = () => {
     const selectableIds = pendingWork.filter(canSelect).map(e => e._id);
     if (selectedIds.size === selectableIds.length) {
@@ -321,11 +343,16 @@ const ApprovalDashboard = () => {
               className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
             >
               <option value="">All Activities</option>
-              <option value="Scanning">Scanning</option>
+              <option value="SCAN">Scanning</option>
               <option value="QC">QC</option>
-              <option value="Outward">Outward</option>
-              <option value="Sticker">Sticker</option>
+              <option value="Sticker">Stickering</option>
               <option value="Inward">Inward</option>
+              <option value="Outward">Outward</option>
+              <option value="Day">Day Wise</option>
+              <option value="Training">Training</option>
+              <option value="Referral">Referral</option>
+              <option value="Misc">Misc</option>
+              <option value="Others">Others</option>
             </select>
           </div>
         </div>
@@ -385,7 +412,7 @@ const ApprovalDashboard = () => {
                       {entry.operatorId?.name || 'Unknown'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {entry.activityType || 'Scanning'}
+                      {formatActivity(entry.activityType) || 'Scanning'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {entry.scans}

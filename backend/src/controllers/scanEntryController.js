@@ -3,6 +3,48 @@ const Project = require('../models/Project');
 const Center = require('../models/Center');
 const Staff = require('../models/Staff');
 
+const ACTIVITY_CATALOG = [
+  { name: 'Scanning', code: 'SCAN', aliases: ['Scanning', 'SCAN'] },
+  { name: 'QC', code: 'QC', aliases: ['QC'] },
+  { name: 'Stickering', code: 'Sticker', aliases: ['Stickering', 'Sticker'] },
+  { name: 'Inward', code: 'Inward', aliases: ['Inward'] },
+  { name: 'Outward', code: 'Outward', aliases: ['Outward'] },
+  { name: 'Day Wise', code: 'Day', aliases: ['Day Wise', 'Day', 'DayWise'] },
+  { name: 'Training', code: 'Training', aliases: ['Training'] },
+  { name: 'Referral', code: 'Referral', aliases: ['Referral'] },
+  { name: 'Misc', code: 'Misc', aliases: ['Misc'] },
+  { name: 'Others', code: 'Others', aliases: ['Others'] },
+];
+
+const normalizeActivityText = (value) => {
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, '');
+};
+
+const normalizeActivityType = (value) => {
+  const v = normalizeActivityText(value);
+  if (!v) return null;
+
+  for (const a of ACTIVITY_CATALOG) {
+    for (const alias of a.aliases) {
+      if (normalizeActivityText(alias) === v) return a.code;
+    }
+  }
+
+  return null;
+};
+
+const activityQueryValues = (value) => {
+  const code = normalizeActivityType(value);
+  if (!code) return [String(value)];
+
+  const activity = ACTIVITY_CATALOG.find(a => a.code === code);
+  if (!activity) return [String(value)];
+
+  const values = new Set([activity.code]);
+  for (const alias of activity.aliases) values.add(alias);
+  return Array.from(values);
+};
+
 // ... (createScanEntry and getMyEntries remain same)
 const createScanEntry = async (req, res) => {
   const { projectId, scans, date, activityType } = req.body;
@@ -19,10 +61,10 @@ const createScanEntry = async (req, res) => {
 
     // Determine rate and amount
     let rate = project.scanRate;
-    const type = activityType || 'Scanning';
+    const type = normalizeActivityType(activityType) || 'SCAN';
 
     if (project.rateChart && project.rateChart.length > 0) {
-      const rateItem = project.rateChart.find(r => r.activityName === type && r.status === 'active');
+      const rateItem = project.rateChart.find(r => r.status === 'active' && normalizeActivityType(r.activityName) === type);
       if (rateItem) {
         rate = rateItem.rate;
       }
@@ -330,7 +372,7 @@ const getPendingEntries = async (req, res) => {
     }
 
     if (activityType) {
-      query.activityType = String(activityType);
+      query.activityType = { $in: activityQueryValues(activityType) };
     }
 
     const entries = await ScanEntry.find(query)
@@ -537,22 +579,23 @@ const validateBulkUpload = async (req, res) => {
 
     // 4. Validate Activity Type
     if (project) {
-      let isValidActivity = false;
-      let validActivities = ['Scanning']; // Default valid activity
+      const normalizedActivity = normalizeActivityType(activityType) || (!activityType ? 'SCAN' : null);
+      if (!normalizedActivity) {
+        rowErrors.push(`Activity Type '${activityType}' is invalid. Valid options: ${ACTIVITY_CATALOG.map(a => `${a.name} (${a.code})`).join(', ')}`);
+      } else {
+        const validCodes = new Set(['SCAN']);
+        if (project.rateChart && project.rateChart.length > 0) {
+          project.rateChart
+            .filter(r => r.status === 'active')
+            .forEach((r) => {
+              const c = normalizeActivityType(r.activityName);
+              if (c) validCodes.add(c);
+            });
+        }
 
-      if (project.rateChart && project.rateChart.length > 0) {
-        const activeRates = project.rateChart
-          .filter(r => r.status === 'active')
-          .map(r => r.activityName);
-        validActivities = [...validActivities, ...activeRates];
-      }
-
-      if (validActivities.includes(activityType) || (!activityType && validActivities.includes('Scanning'))) {
-        isValidActivity = true;
-      }
-
-      if (!isValidActivity) {
-        rowErrors.push(`Activity Type '${activityType}' not valid for project '${projectCode}'. Valid options: ${validActivities.join(', ')}`);
+        if (!validCodes.has(normalizedActivity)) {
+          rowErrors.push(`Activity Type '${activityType}' not valid for project '${projectCode}'. Configure an active rate for this activity in the project rate chart.`);
+        }
       }
     }
 
@@ -637,8 +680,9 @@ const bulkCreateScanEntries = async (req, res) => {
 
       // Calculate Amount
       let rate = project.scanRate;
-      if (activityType && activityType !== 'Scanning' && project.rateChart) {
-        const rateItem = project.rateChart.find(r => r.activityName === activityType && r.status === 'active');
+      const normalizedActivity = normalizeActivityType(activityType) || 'SCAN';
+      if (project.rateChart) {
+        const rateItem = project.rateChart.find(r => r.status === 'active' && normalizeActivityType(r.activityName) === normalizedActivity);
         if (rateItem) rate = rateItem.rate;
       }
 
@@ -646,7 +690,7 @@ const bulkCreateScanEntries = async (req, res) => {
         operatorId: staff._id,
         projectId: project._id,
         centerId: center._id,
-        activityType: activityType || 'Scanning',
+        activityType: normalizedActivity,
         scans: Number(unitsCompleted),
         amount: Number(unitsCompleted) * rate,
         date: new Date(workDate),

@@ -6,6 +6,19 @@ import Button from '../components/Button';
 import ConfirmModal from '../components/ConfirmModal';
 import AlertModal from '../components/AlertModal';
 
+const ACTIVITY_OPTIONS = [
+  { name: 'Scanning', code: 'SCAN' },
+  { name: 'QC', code: 'QC' },
+  { name: 'Stickering', code: 'Sticker' },
+  { name: 'Inward', code: 'Inward' },
+  { name: 'Outward', code: 'Outward' },
+  { name: 'Day Wise', code: 'Day' },
+  { name: 'Training', code: 'Training' },
+  { name: 'Referral', code: 'Referral' },
+  { name: 'Misc', code: 'Misc' },
+  { name: 'Others', code: 'Others' },
+];
+
 const Projects = () => {
   const { user: currentUser } = useAuth();
   const [projects, setProjects] = useState([]);
@@ -45,6 +58,13 @@ const Projects = () => {
     activityName: '',
     rate: '',
   });
+
+  const formatActivity = (value) => {
+    const v = String(value || '').trim();
+    if (!v) return '';
+    const match = ACTIVITY_OPTIONS.find(a => a.code === v);
+    return match ? `${match.name} (${match.code})` : v;
+  };
 
   const addRateChartItem = () => {
     if (rateChartItem.activityName && rateChartItem.rate) {
@@ -238,7 +258,7 @@ const Projects = () => {
                 projectCode: '',
                 startDate: '',
                 endDate: '',
-                center: '',
+                centers: [],
                 managers: [],
                 scanRate: '',
                 productivityLimit: '',
@@ -414,7 +434,7 @@ const Projects = () => {
                     name="centers"
                     options={centers.map(center => ({ value: center._id, label: `${center.name} (${center.centerCode})` }))}
                     value={centers
-                      .filter(center => formData.centers.includes(center._id))
+                      .filter(center => (formData.centers || []).includes(center._id))
                       .map(center => ({ value: center._id, label: `${center.name} (${center.centerCode})` }))
                     }
                     onChange={handleCentersChange}
@@ -436,7 +456,7 @@ const Projects = () => {
                     name="managers"
                     options={managers.map(user => ({ value: user._id, label: `${user.name} (${user.mobile})` }))}
                     value={managers
-                      .filter(user => formData.managers.includes(user._id))
+                      .filter(user => (formData.managers || []).includes(user._id))
                       .map(user => ({ value: user._id, label: `${user.name} (${user.mobile})` }))
                     }
                     onChange={handleManagerChange}
@@ -455,13 +475,18 @@ const Projects = () => {
                   <h4 className="text-md font-medium text-gray-900 mb-2">Rate Chart Mapping</h4>
 
                   <div className="flex gap-2 mb-2">
-                    <input
-                      type="text"
-                      placeholder="Activity Name (e.g., Scanning)"
+                    <select
                       value={rateChartItem.activityName}
                       onChange={(e) => setRateChartItem({ ...rateChartItem, activityName: e.target.value })}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm"
-                    />
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm bg-white"
+                    >
+                      <option value="">Select Activity</option>
+                      {ACTIVITY_OPTIONS.map(a => (
+                        <option key={a.code} value={a.code}>
+                          {a.name} ({a.code})
+                        </option>
+                      ))}
+                    </select>
                     <input
                       type="number"
                       placeholder="Rate (₹)"
@@ -483,7 +508,7 @@ const Projects = () => {
                       {formData.rateChart.map((item, index) => (
                         <div key={index} className="flex justify-between items-center bg-white p-2 rounded border border-gray-200 shadow-sm text-sm">
                           <div>
-                            <span className="font-medium text-gray-900">{item.activityName}</span>
+                            <span className="font-medium text-gray-900">{formatActivity(item.activityName)}</span>
                             <span className="ml-2 text-gray-500">- ₹{item.rate}</span>
                           </div>
                           <button
