@@ -2,4 +2,56 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Custom styles can go here */
+[data-theme='dark'] body {
+  background: #0f1115;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+[data-theme='dark'] .bg-white {
+  background-color: #15181e !important;
+}
+
+[data-theme='dark'] .bg-gray-50 {
+  background-color: #0f1115 !important;
+}
+
+[data-theme='dark'] .bg-gray-100 {
+  background-color: #14161b !important;
+}
+
+[data-theme='dark'] .text-gray-900 {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+[data-theme='dark'] .text-gray-800,
+[data-theme='dark'] .text-gray-700 {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+[data-theme='dark'] .text-gray-600,
+[data-theme='dark'] .text-gray-500,
+[data-theme='dark'] .text-gray-400 {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+
+[data-theme='dark'] .border-gray-200,
+[data-theme='dark'] .border-gray-100 {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+[data-theme='dark'] .border-gray-300 {
+  border-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+[data-theme='dark'] input,
+[data-theme='dark'] select,
+[data-theme='dark'] textarea {
+  background-color: #15181e;
+  border-color: rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+[data-theme='dark'] input::placeholder,
+[data-theme='dark'] textarea::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}

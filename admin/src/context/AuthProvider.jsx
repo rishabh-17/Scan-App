@@ -5,6 +5,13 @@ import { AuthContext } from './authContext';
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [themeMode, setThemeMode] = useState(() => localStorage.getItem('themeMode') || 'light');
+
+  useEffect(() => {
+    localStorage.setItem('themeMode', themeMode);
+    document.documentElement.setAttribute('data-theme', themeMode);
+    document.documentElement.style.colorScheme = themeMode;
+  }, [themeMode]);
 
   useEffect(() => {
     const checkUser = async () => {
@@ -43,7 +50,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, register }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, register, themeMode, setThemeMode }}>
       {!loading && children}
     </AuthContext.Provider>
   );

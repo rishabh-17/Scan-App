@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
+import { Card, Col, Row, Segmented, Space, Statistic, Table, Tag, Typography } from 'antd';
+import { Pie, Column } from '@ant-design/plots';
 import Button from '../components/Button';
 import Loader from '../components/Loader';
 import ConfirmModal from '../components/ConfirmModal';
 import AlertModal from '../components/AlertModal';
-import Modal from '../components/Modal'; // For custom reject modal
+import Modal from '../components/Modal';
 
 const Dashboard = () => {
   const [entries, setEntries] = useState([]);
@@ -12,6 +14,7 @@ const Dashboard = () => {
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('pending');
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [stats, setStats] = useState({ totalUnits: 0, totalAmount: 0, pendingCount: 0, approvedCount: 0, rejectedCount: 0 });
 
   // UI States
   const [processingId, setProcessingId] = useState(null);
@@ -40,18 +43,29 @@ const Dashboard = () => {
     }
   }, [activeTab]);
 
+  const fetchStats = useCallback(async () => {
+    try {
+      const response = await api.get('/scan-entry/stats');
+      setStats(response.data || { totalUnits: 0, totalAmount: 0, pendingCount: 0, approvedCount: 0, rejectedCount: 0 });
+    } catch {
+      setStats({ totalUnits: 0, totalAmount: 0, pendingCount: 0, approvedCount: 0, rejectedCount: 0 });
+    }
+  }, []);
+
   useEffect(() => {
     const run = async () => {
+      await fetchStats();
       await fetchEntries();
       setSelectedIds(new Set());
     };
     run();
-  }, [fetchEntries]);
+  }, [fetchEntries, fetchStats]);
 
   const handleApprove = async (id) => {
     setProcessingId(id);
     try {
       await api.put(`/scan-entry/${id}/approve`);
+      await fetchStats();
       await fetchEntries();
     } catch (err) {
       setAlertConfig({
@@ -85,6 +99,7 @@ const Dashboard = () => {
         ids.map(id => api.put(`/scan-entry/${id}/approve`))
       );
       setSelectedIds(new Set());
+      await fetchStats();
       await fetchEntries();
       setConfirmConfig({ ...confirmConfig, isOpen: false });
       setAlertConfig({ isOpen: true, title: 'Success', message: 'Selected entries approved successfully', variant: 'success' });
@@ -148,6 +163,7 @@ const Dashboard = () => {
       }
 
       setRejectModal({ isOpen: false, ids: [] });
+      await fetchStats();
       await fetchEntries();
     } catch (err) {
       setAlertConfig({
@@ -159,28 +175,6 @@ const Dashboard = () => {
     } finally {
       setActionLoading(false);
     }
-  };
-
-  const toggleSelectAll = () => {
-    const selectableIds = entries.filter(canSelect).map(e => e._id);
-    if (selectedIds.size === selectableIds.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(selectableIds));
-    }
-  };
-
-  const toggleSelect = (id) => {
-    const entry = entries.find(e => e._id === id);
-    if (!entry || !canSelect(entry)) return;
-
-    const newSelected = new Set(selectedIds);
-    if (newSelected.has(id)) {
-      newSelected.delete(id);
-    } else {
-      newSelected.add(id);
-    }
-    setSelectedIds(newSelected);
   };
 
   const getNextAction = (entry) => {
@@ -198,62 +192,172 @@ const Dashboard = () => {
 
   const canSelect = (entry) => canApprove(entry) || canReject(entry);
 
-  const getStatusBadge = (status) => {
-    const base = "px-2.5 py-1 text-xs font-medium rounded-full capitalize";
-    if (status === 'entered') return `${base} bg-yellow-50 text-yellow-700`;
-    if (status === 'finance_approved') return `${base} bg-green-50 text-green-700`;
-    if (status === 'locked') return `${base} bg-gray-50 text-gray-700`;
-    return `${base} bg-blue-50 text-blue-700`;
+  const statusPieData = [
+    { type: 'Pending', value: Number(stats.pendingCount || 0) },
+    { type: 'Approved', value: Number(stats.approvedCount || 0) },
+    { type: 'Rejected', value: Number(stats.rejectedCount || 0) },
+  ].filter(d => d.value > 0);
+
+  const dailyData = (() => {
+    const byDay = new Map();
+    const now = new Date();
+    const cutoff = new Date(now);
+    cutoff.setDate(cutoff.getDate() - 6);
+    entries.forEach((e) => {
+      const d = new Date(e.date);
+      if (Number.isNaN(d.getTime()) || d < cutoff) return;
+      const key = d.toISOString().slice(0, 10);
+      byDay.set(key, (byDay.get(key) || 0) + Number(e.scans || 0));
+    });
+    const days = [];
+    for (let i = 6; i >= 0; i -= 1) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      days.push({ day: key, units: byDay.get(key) || 0 });
+    }
+    return days;
+  })();
+
+  const columns = [
+    {
+      title: 'Date',
+      dataIndex: 'date',
+      key: 'date',
+      render: (v) => new Date(v).toLocaleDateString(),
+    },
+    {
+      title: 'Operator',
+      dataIndex: ['operatorId', 'name'],
+      key: 'operator',
+      render: (_, r) => r.operatorId?.name || 'Unknown',
+    },
+    {
+      title: 'Project',
+      dataIndex: ['projectId', 'name'],
+      key: 'project',
+      render: (_, r) => r.projectId?.name || 'Unknown',
+    },
+    {
+      title: 'Activity',
+      dataIndex: 'activityType',
+      key: 'activityType',
+      render: (v) => String(v || ''),
+    },
+    {
+      title: 'Scans',
+      dataIndex: 'scans',
+      key: 'scans',
+    },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      key: 'status',
+      render: (v) => <Tag>{String(v || '').replace(/_/g, ' ')}</Tag>,
+    },
+    {
+      title: 'Action',
+      key: 'action',
+      render: (_, entry) => (
+        <Space>
+          {canApprove(entry) && (
+            <Button
+              onClick={() => handleApprove(entry._id)}
+              variant="success"
+              loading={processingId === entry._id}
+              disabled={processingId !== null}
+            >
+              {getNextAction(entry)}
+            </Button>
+          )}
+          {canReject(entry) && (
+            <Button
+              onClick={() => openRejectModal(entry._id)}
+              variant="danger"
+              disabled={processingId !== null}
+            >
+              Reject
+            </Button>
+          )}
+        </Space>
+      ),
+    },
+  ];
+
+  const rowSelection = {
+    selectedRowKeys: Array.from(selectedIds),
+    onChange: (keys) => setSelectedIds(new Set(keys)),
+    getCheckboxProps: (record) => ({ disabled: !canSelect(record) }),
   };
 
   return (
-    <div className="space-y-6 mx-2">
-      {/* Page header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">
-            {activeTab === 'pending' ? 'Pending Approvals' : activeTab === 'approved' ? 'Approved Entries' : 'Rejected Entries'}
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {activeTab === 'pending'
-              ? 'Review and approve scan entries across workflow stages'
-              : activeTab === 'approved'
-                ? 'View history of approved and completed entries'
-                : 'View history of rejected entries'}
-          </p>
-        </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} md={6}>
+          <Card>
+            <Statistic title="Pending" value={stats.pendingCount || 0} />
+          </Card>
+        </Col>
+        <Col xs={24} md={6}>
+          <Card>
+            <Statistic title="Approved" value={stats.approvedCount || 0} />
+          </Card>
+        </Col>
+        <Col xs={24} md={6}>
+          <Card>
+            <Statistic title="Rejected" value={stats.rejectedCount || 0} />
+          </Card>
+        </Col>
+        <Col xs={24} md={6}>
+          <Card>
+            <Statistic title="Total Units" value={stats.totalUnits || 0} />
+          </Card>
+        </Col>
+        <Col xs={24} md={12}>
+          <Card title="Status Split">
+            {statusPieData.length > 0 ? (
+              <Pie
+                data={statusPieData}
+                angleField="value"
+                colorField="type"
+                radius={0.9}
+                height={220}
+                legend={{ position: 'bottom' }}
+              />
+            ) : (
+              <Typography.Text type="secondary">No data</Typography.Text>
+            )}
+          </Card>
+        </Col>
+        <Col xs={24} md={12}>
+          <Card title="Units (Last 7 Days)">
+            <Column
+              data={dailyData}
+              xField="day"
+              yField="units"
+              height={220}
+              xAxis={{ label: { autoRotate: false } }}
+            />
+          </Card>
+        </Col>
+      </Row>
 
-        {/* Tabs */}
-        <div className="flex bg-gray-100 p-1 rounded-lg">
-          <button
-            onClick={() => setActiveTab('pending')}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'pending'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-500 hover:text-gray-900'
-              }`}
-          >
-            Pending
-          </button>
-          <button
-            onClick={() => setActiveTab('approved')}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'approved'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-500 hover:text-gray-900'
-              }`}
-          >
-            Approved
-          </button>
-          <button
-            onClick={() => setActiveTab('rejected')}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'rejected'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-500 hover:text-gray-900'
-              }`}
-          >
-            Rejected
-          </button>
-        </div>
-      </div>
+      <Card>
+        <Space style={{ justifyContent: 'space-between', width: '100%' }}>
+          <Typography.Title level={4} style={{ margin: 0 }}>
+            {activeTab === 'pending' ? 'Pending Approvals' : activeTab === 'approved' ? 'Approved Entries' : 'Rejected Entries'}
+          </Typography.Title>
+          <Segmented
+            value={activeTab}
+            options={[
+              { label: 'Pending', value: 'pending' },
+              { label: 'Approved', value: 'approved' },
+              { label: 'Rejected', value: 'rejected' },
+            ]}
+            onChange={setActiveTab}
+          />
+        </Space>
+      </Card>
 
       {/* Bulk Actions */}
       {selectedIds.size > 0 && (
@@ -278,110 +382,23 @@ const Dashboard = () => {
       )}
 
       {loading ? (
-        <div className="flex justify-center p-12">
-          <Loader size="xl" className="text-indigo-600" />
-        </div>
+        <Card style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 180 }}>
+          <Loader size="xl" />
+        </Card>
       ) : error ? (
-        <div className="p-6 text-red-500 bg-red-50 rounded-lg">{error}</div>
+        <Card>
+          <Typography.Text type="danger">{error}</Typography.Text>
+        </Card>
       ) : (
-        /* Table card */
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead className="bg-gray-50 border-b border-gray-100">
-                <tr>
-                  <th className="px-6 py-3 text-left">
-                    <input
-                      type="checkbox"
-                      checked={entries.some(canSelect) && selectedIds.size === entries.filter(canSelect).length}
-                      onChange={toggleSelectAll}
-                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                    />
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Operator</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Project</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Scans</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-                  <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Action</th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-gray-100">
-                {entries.map((entry) => (
-                  <tr key={entry._id} className={`hover:bg-gray-50 transition ${selectedIds.has(entry._id) ? 'bg-blue-50' : ''}`}>
-                    <td className="px-6 py-4">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(entry._id)}
-                        disabled={!canSelect(entry)}
-                        onChange={() => toggleSelect(entry._id)}
-                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                      />
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {new Date(entry.date).toLocaleDateString()}
-                    </td>
-
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                      {entry.operatorId?.name || 'Unknown'}
-                    </td>
-
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {entry.projectId?.name || 'Unknown'}
-                    </td>
-
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {entry.scans}
-                    </td>
-
-                    <td className="px-6 py-4">
-                      <span className={getStatusBadge(entry.status)}>
-                        {entry.status.replace('_', ' ')}
-                      </span>
-                    </td>
-
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-2">
-                        {canApprove(entry) && (
-                          <Button
-                            onClick={() => handleApprove(entry._id)}
-                            variant="success"
-                            size="sm"
-                            className="py-1 px-3 text-xs"
-                            loading={processingId === entry._id}
-                            disabled={processingId !== null}
-                          >
-                            {getNextAction(entry)}
-                          </Button>
-                        )}
-                        {canReject(entry) && (
-                          <Button
-                            onClick={() => openRejectModal(entry._id)}
-                            variant="danger"
-                            size="sm"
-                            className="py-1 px-3 text-xs"
-                            disabled={processingId !== null}
-                          >
-                            Reject
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-
-                {entries.length === 0 && (
-                  <tr>
-                    <td colSpan="7" className="py-12 text-center text-gray-500">
-                      {activeTab === 'pending' ? 'No pending approvals found' : activeTab === 'approved' ? 'No approved entries found' : 'No rejected entries found'}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <Card>
+          <Table
+            rowKey="_id"
+            columns={columns}
+            dataSource={entries}
+            rowSelection={rowSelection}
+            pagination={{ pageSize: 20 }}
+          />
+        </Card>
       )}
 
       {/* Global Modals */}
