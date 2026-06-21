@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import AlertModal from '../components/AlertModal';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://scan-app-ukcg.onrender.com/api';
 const isObjectId = (value) => /^[0-9a-fA-F]{24}$/.test(String(value || '').trim());
 const getIdValue = (value) => {
   if (!value) return '';
