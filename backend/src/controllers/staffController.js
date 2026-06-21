@@ -288,9 +288,18 @@ const getStaffById = async (req, res) => {
     try {
         const staff = await Staff.findById(req.params.id)
             .select('-password')
-            .populate('project', 'name center scanRate');
+            .populate('project', 'name center scanRate')
+            .populate('center', 'name centerCode location');
 
         if (staff) {
+            if (req.user && req.user.role === 'center_supervisor') {
+                const managedCenters = await Center.find({ supervisors: req.user._id }).select('_id');
+                const centerIds = managedCenters.map((c) => c._id.toString());
+
+                if (!staff.center || !centerIds.includes(staff.center._id.toString())) {
+                    return res.status(403).json({ message: 'Not authorized to view staff from another center' });
+                }
+            }
             res.json(staff);
         } else {
             res.status(404).json({ message: 'Staff not found' });
@@ -464,11 +473,26 @@ const importStaff = async (req, res) => {
                 continue;
             }
 
+            if (!employeeIdText) {
+                failures.push({ rowNumber, reason: 'Missing required field (Employee ID)' });
+                continue;
+            }
+
             const locationText = toText(r.location);
             const centerRaw = toText(r.centerId);
+            if (!centerRaw && !locationText) {
+                failures.push({ rowNumber, reason: 'Missing required field (Centre ID)' });
+                continue;
+            }
+
             const centerId = /^[0-9a-fA-F]{24}$/.test(centerRaw)
                 ? centerRaw
                 : (centerRaw ? centerLookup.get(normalizeHeader(centerRaw)) : (locationText ? centerLookup.get(normalizeHeader(locationText)) : undefined));
+
+            if (!centerId) {
+                failures.push({ rowNumber, reason: 'Centre ID/Location does not match any center' });
+                continue;
+            }
 
             if (allowedCenterIds && !centerId) {
                 failures.push({ rowNumber, reason: 'Centre ID/Location does not match an assigned center' });
@@ -545,7 +569,7 @@ const importStaff = async (req, res) => {
                 ...patch,
                 role: 'staff',
                 status: 'pending',
-                employeeId: employeeIdText || `IMP-${mobile}`,
+                employeeId: employeeIdText,
                 password: defaultPasswordHash,
             });
 

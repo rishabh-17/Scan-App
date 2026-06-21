@@ -53,6 +53,15 @@ const registerStaff = async (req, res) => {
     return res.status(400).json({ message: 'Please add all required fields' });
   }
 
+  const normalizedReferenceSource = ['Agency', 'Direct'].includes(String(referenceSource || '').trim())
+    ? String(referenceSource).trim()
+    : 'Direct';
+  const normalizedAgencyName = normalizedReferenceSource === 'Agency' ? String(agencyName || '').trim() : '';
+
+  if (normalizedReferenceSource === 'Agency' && !normalizedAgencyName) {
+    return res.status(400).json({ message: 'Agency name is required when source is Agency' });
+  }
+
   // Resolve Center Code to ID if necessary
   let centerId = center;
   const isObjectId = /^[0-9a-fA-F]{24}$/.test(center);
@@ -175,8 +184,8 @@ const registerStaff = async (req, res) => {
     highestEducation: highestEducation || '',
     affiliatedUniversity: affiliatedUniversity || '',
     previousEmployment: previousEmployment || '',
-    referenceSource: referenceSource || '',
-    agencyName: agencyName || '',
+    referenceSource: normalizedReferenceSource,
+    agencyName: normalizedAgencyName,
     referenceContactNo: referenceContactNo || '',
     bankDetails: {
       accountNo: bankDetails?.accountNo || '',

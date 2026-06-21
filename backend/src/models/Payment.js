@@ -30,6 +30,30 @@ const paymentSchema = new mongoose.Schema({
   remarks: {
     type: String,
   },
+  failureReason: {
+    type: String,
+  },
+  failureMarkedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Staff',
+  },
+  failureMarkedAt: {
+    type: Date,
+  },
+  correctionUpdatedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Staff',
+  },
+  correctionUpdatedAt: {
+    type: Date,
+  },
+  resubmittedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Staff',
+  },
+  resubmittedAt: {
+    type: Date,
+  },
   status: {
     type: String,
     enum: ['pending', 'processed', 'failed', 'paid'],

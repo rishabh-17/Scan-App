@@ -41,6 +41,11 @@ const projectSchema = new mongoose.Schema({
   rateChart: [{
     activityName: { type: String, required: true },
     rate: { type: Number, required: true },
+    center: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Center',
+      default: null,
+    },
     effectiveDate: { type: Date, default: Date.now },
     status: { type: String, enum: ['active', 'inactive'], default: 'active' }
   }]

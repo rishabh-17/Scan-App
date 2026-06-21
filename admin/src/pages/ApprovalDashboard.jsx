@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { getStats, getPendingEntries, approveEntry, rejectEntry, getProjects, getCenters } from '../services/api';
+import React, { useState, useEffect, useCallback } from 'react';
+import { getStats, getPendingEntries, approveEntry, rejectEntry, getProjects, getCenters, resubmitEntry } from '../services/api';
 import Button from '../components/Button';
 import Loader from '../components/Loader';
 import ConfirmModal from '../components/ConfirmModal';
@@ -35,6 +35,19 @@ const ApprovalDashboard = () => {
   const [alertConfig, setAlertConfig] = useState({ isOpen: false, title: '', message: '' });
   const [rejectModal, setRejectModal] = useState({ isOpen: false, ids: [] });
   const [rejectReason, setRejectReason] = useState('');
+  const [resubmitModal, setResubmitModal] = useState({ isOpen: false, entry: null });
+  const [resubmitForm, setResubmitForm] = useState({ scans: '', activityType: '', date: '' });
+
+  const fetchRecords = useCallback(async (activeFilters) => {
+    const pendingData = await getPendingEntries({
+      type: 'all',
+      ...(activeFilters.projectId ? { projectId: activeFilters.projectId } : {}),
+      ...(activeFilters.centerId ? { centerId: activeFilters.centerId } : {}),
+      ...(activeFilters.activityType ? { activityType: activeFilters.activityType } : {})
+    });
+    setPendingWork(Array.isArray(pendingData) ? pendingData : []);
+    setSelectedIds(new Set());
+  }, []);
 
   useEffect(() => {
     const run = async () => {
@@ -63,14 +76,7 @@ const ApprovalDashboard = () => {
     const run = async () => {
       try {
         setLoading(true);
-        const pendingData = await getPendingEntries({
-          type: 'all',
-          ...(filters.projectId ? { projectId: filters.projectId } : {}),
-          ...(filters.centerId ? { centerId: filters.centerId } : {}),
-          ...(filters.activityType ? { activityType: filters.activityType } : {})
-        });
-        setPendingWork(Array.isArray(pendingData) ? pendingData : []);
-        setSelectedIds(new Set());
+        await fetchRecords(filters);
       } catch (err) {
         console.error('Error fetching entries:', err);
         setError('Failed to load entries');
@@ -80,7 +86,7 @@ const ApprovalDashboard = () => {
     };
 
     run();
-  }, [filters.projectId, filters.centerId, filters.activityType]);
+  }, [fetchRecords, filters]);
 
   const fetchStats = async () => {
     try {
@@ -98,6 +104,7 @@ const ApprovalDashboard = () => {
       await approveEntry(id);
       // Refresh data
       await fetchStats();
+      await fetchRecords(filters);
     } catch (err) {
       console.error('Approval failed:', err);
       setAlertConfig({
@@ -132,6 +139,7 @@ const ApprovalDashboard = () => {
       );
       setSelectedIds(new Set());
       await fetchStats();
+      await fetchRecords(filters);
       setConfirmConfig({ ...confirmConfig, isOpen: false });
       setAlertConfig({ isOpen: true, title: 'Success', message: 'Selected entries approved successfully', variant: 'success' });
     } catch (err) {
@@ -139,6 +147,7 @@ const ApprovalDashboard = () => {
       setConfirmConfig({ ...confirmConfig, isOpen: false });
       setAlertConfig({ isOpen: true, title: 'Error', message: 'Some approvals failed. Please check the list.' });
       fetchStats();
+      fetchRecords(filters);
     } finally {
       setActionLoading(false);
     }
@@ -193,6 +202,7 @@ const ApprovalDashboard = () => {
 
       setRejectModal({ isOpen: false, ids: [] });
       await fetchStats();
+      await fetchRecords(filters);
     } catch (err) {
       console.error('Rejection failed:', err);
       setAlertConfig({
@@ -201,6 +211,7 @@ const ApprovalDashboard = () => {
         message: err.response?.data?.message || err.message
       });
       fetchStats();
+      fetchRecords(filters);
     } finally {
       setActionLoading(false);
     }
@@ -208,7 +219,43 @@ const ApprovalDashboard = () => {
 
   const canApprove = (entry) => entry.actions?.includes('APPROVE');
   const canReject = (entry) => entry.actions?.includes('REJECT');
+  const canResubmit = (entry) => entry.actions?.includes('RESUBMIT');
   const canSelect = (entry) => canApprove(entry) || canReject(entry);
+
+  const openResubmitModal = (entry) => {
+    setResubmitModal({ isOpen: true, entry });
+    setResubmitForm({
+      scans: entry?.scans ?? '',
+      activityType: entry?.activityType ?? '',
+      date: entry?.date ? new Date(entry.date).toISOString().slice(0, 10) : '',
+    });
+  };
+
+  const handleResubmit = async () => {
+    if (!resubmitModal.entry) return;
+
+    setActionLoading(true);
+    try {
+      await resubmitEntry(resubmitModal.entry._id, resubmitForm);
+      setResubmitModal({ isOpen: false, entry: null });
+      await fetchStats();
+      await fetchRecords(filters);
+      setAlertConfig({
+        isOpen: true,
+        title: 'Success',
+        message: 'Record updated and resubmitted successfully',
+        variant: 'success'
+      });
+    } catch (err) {
+      setAlertConfig({
+        isOpen: true,
+        title: 'Resubmission Failed',
+        message: err.response?.data?.message || err.message
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   const formatActivity = (value) => {
     const v = String(value || '').trim();
@@ -377,6 +424,7 @@ const ApprovalDashboard = () => {
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Project</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Operator</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Activity</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Scans</th>
@@ -388,7 +436,7 @@ const ApprovalDashboard = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {pendingWork.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="px-6 py-4 text-center text-gray-500">No records found.</td>
+                  <td colSpan="10" className="px-6 py-4 text-center text-gray-500">No records found.</td>
                 </tr>
               ) : (
                 pendingWork.map((entry) => (
@@ -407,6 +455,9 @@ const ApprovalDashboard = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {entry.projectId?.name || 'Unknown'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {entry.centerId?.name || entry.centerId?.location || 'Unknown'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {entry.operatorId?.name || 'Unknown'}
@@ -449,6 +500,17 @@ const ApprovalDashboard = () => {
                         >
                           Reject
                         </Button>
+                        {canResubmit(entry) && (
+                          <Button
+                            onClick={() => openResubmitModal(entry)}
+                            variant="primary"
+                            size="sm"
+                            className="py-1 px-3 text-xs"
+                            disabled={processingId !== null}
+                          >
+                            Update & Resubmit
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -508,6 +570,69 @@ const ApprovalDashboard = () => {
               loading={actionLoading}
             >
               Confirm Reject
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={resubmitModal.isOpen}
+        onClose={() => setResubmitModal({ isOpen: false, entry: null })}
+        title="Update And Resubmit"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+            <input
+              type="date"
+              value={resubmitForm.date}
+              onChange={(e) => setResubmitForm((prev) => ({ ...prev, date: e.target.value }))}
+              className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Activity</label>
+            <select
+              value={resubmitForm.activityType}
+              onChange={(e) => setResubmitForm((prev) => ({ ...prev, activityType: e.target.value }))}
+              className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+            >
+              <option value="SCAN">Scanning</option>
+              <option value="QC">QC</option>
+              <option value="Sticker">Stickering</option>
+              <option value="Inward">Inward</option>
+              <option value="Outward">Outward</option>
+              <option value="Day">Day Wise</option>
+              <option value="Training">Training</option>
+              <option value="Referral">Referral</option>
+              <option value="Misc">Misc</option>
+              <option value="Others">Others</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Units</label>
+            <input
+              type="number"
+              min="1"
+              value={resubmitForm.scans}
+              onChange={(e) => setResubmitForm((prev) => ({ ...prev, scans: e.target.value }))}
+              className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button
+              variant="secondary"
+              onClick={() => setResubmitModal({ isOpen: false, entry: null })}
+              disabled={actionLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleResubmit}
+              loading={actionLoading}
+            >
+              Resubmit
             </Button>
           </div>
         </div>

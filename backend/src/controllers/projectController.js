@@ -1,55 +1,13 @@
 const Project = require('../models/Project');
 const Center = require('../models/Center');
+const { normalizeRateChart } = require('../utils/activityCatalog');
 
-const ACTIVITY_CATALOG = [
-  { name: 'Scanning', code: 'SCAN', aliases: ['Scanning', 'SCAN'] },
-  { name: 'QC', code: 'QC', aliases: ['QC'] },
-  { name: 'Stickering', code: 'Sticker', aliases: ['Stickering', 'Sticker'] },
-  { name: 'Inward', code: 'Inward', aliases: ['Inward'] },
-  { name: 'Outward', code: 'Outward', aliases: ['Outward'] },
-  { name: 'Day Wise', code: 'Day', aliases: ['Day Wise', 'Day', 'DayWise'] },
-  { name: 'Training', code: 'Training', aliases: ['Training'] },
-  { name: 'Referral', code: 'Referral', aliases: ['Referral'] },
-  { name: 'Misc', code: 'Misc', aliases: ['Misc'] },
-  { name: 'Others', code: 'Others', aliases: ['Others'] },
-];
-
-const normalizeActivityText = (value) => {
-  return String(value || '').trim().toLowerCase().replace(/\s+/g, '');
-};
-
-const normalizeActivityType = (value) => {
-  const v = normalizeActivityText(value);
-  if (!v) return null;
-
-  for (const a of ACTIVITY_CATALOG) {
-    for (const alias of a.aliases) {
-      if (normalizeActivityText(alias) === v) return a.code;
-    }
-  }
-
-  return null;
-};
-
-const normalizeRateChart = (rateChart) => {
-  const items = Array.isArray(rateChart) ? rateChart : [];
-  const invalid = [];
-  const normalized = [];
-
-  for (const item of items) {
-    const code = normalizeActivityType(item?.activityName);
-    if (!code) {
-      invalid.push(item?.activityName);
-      continue;
-    }
-
-    normalized.push({
-      ...item,
-      activityName: code,
-    });
-  }
-
-  return { invalid, normalized };
+const canManageProjectRates = async (project, user) => {
+  if (!user) return false;
+  if (user.role === 'admin' || user.role === 'finance_hr') return true;
+  if (user.role !== 'project_manager') return false;
+  if (user.project && String(user.project) === String(project._id)) return true;
+  return Array.isArray(project.managers) && project.managers.some((managerId) => String(managerId) === String(user._id));
 };
 
 const getPublicProjects = async (req, res) => {
@@ -75,7 +33,7 @@ const createProject = async (req, res) => {
   const { name, clientName, projectCode, startDate, endDate, centers, scanRate, productivityLimit, managers, rateChart } = req.body;
 
   try {
-    const { invalid, normalized } = normalizeRateChart(rateChart);
+    const { invalid, normalized } = await normalizeRateChart(rateChart);
     if (invalid.length > 0) {
       return res.status(400).json({ message: `Invalid activity in rate chart: ${invalid.filter(Boolean).join(', ') || '-'}` });
     }
@@ -124,7 +82,8 @@ const getProjects = async (req, res) => {
 
     const projects = await Project.find(query)
       .populate('managers', 'name mobile')
-      .populate('centers', 'name centerCode');
+      .populate('centers', 'name centerCode location')
+      .populate('rateChart.center', 'name centerCode location');
     res.json(projects);
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
@@ -153,7 +112,7 @@ const updateProject = async (req, res) => {
         project.managers = req.body.managers;
       }
       if (req.body.rateChart) {
-        const { invalid, normalized } = normalizeRateChart(req.body.rateChart);
+        const { invalid, normalized } = await normalizeRateChart(req.body.rateChart);
         if (invalid.length > 0) {
           return res.status(400).json({ message: `Invalid activity in rate chart: ${invalid.filter(Boolean).join(', ') || '-'}` });
         }
@@ -168,13 +127,49 @@ const updateProject = async (req, res) => {
       const updatedProject = await project.save();
       const populatedProject = await Project.findById(updatedProject._id)
         .populate('managers', 'name mobile')
-        .populate('centers', 'name centerCode');
+        .populate('centers', 'name centerCode location')
+        .populate('rateChart.center', 'name centerCode location');
       res.json(populatedProject);
     } else {
       res.status(404).json({ message: 'Project not found' });
     }
   } catch (error) {
     res.status(400).json({ message: 'Invalid project data' });
+  }
+};
+
+const updateProjectRates = async (req, res) => {
+  try {
+    const project = await Project.findById(req.params.id);
+
+    if (!project) {
+      return res.status(404).json({ message: 'Project not found' });
+    }
+
+    const allowed = await canManageProjectRates(project, req.user);
+    if (!allowed) {
+      return res.status(403).json({ message: 'Not authorized to manage project rates' });
+    }
+
+    const { invalid, normalized } = await normalizeRateChart(req.body.rateChart);
+    if (invalid.length > 0) {
+      return res.status(400).json({ message: `Invalid activity in rate chart: ${invalid.filter(Boolean).join(', ') || '-'}` });
+    }
+
+    if (typeof req.body.scanRate !== 'undefined') {
+      project.scanRate = req.body.scanRate;
+    }
+    project.rateChart = normalized;
+
+    const updatedProject = await project.save();
+    const populatedProject = await Project.findById(updatedProject._id)
+      .populate('managers', 'name mobile')
+      .populate('centers', 'name centerCode location')
+      .populate('rateChart.center', 'name centerCode location');
+    res.json(populatedProject);
+  } catch (error) {
+    console.error(error);
+    res.status(400).json({ message: 'Invalid project rate data' });
   }
 };
 
@@ -201,5 +196,6 @@ module.exports = {
   getProjects,
   getPublicProjects,
   updateProject,
+  updateProjectRates,
   deleteProject,
 };

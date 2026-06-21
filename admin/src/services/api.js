@@ -43,6 +43,11 @@ export const rejectEntry = async (id, reason) => {
   return response.data;
 };
 
+export const resubmitEntry = async (id, payload) => {
+  const response = await api.put(`/scan-entry/${id}/resubmit`, payload);
+  return response.data;
+};
+
 export const getPendingEntries = async (typeOrParams) => {
   if (typeof typeOrParams === 'string') {
     const response = await api.get(`/scan-entry/pending${typeOrParams ? `?type=${typeOrParams}` : ''}`);
@@ -138,6 +143,11 @@ export const updateProject = async (id, projectData) => {
   return response.data;
 };
 
+export const updateProjectRates = async (id, projectData) => {
+  const response = await api.put(`/projects/${id}/rates`, projectData);
+  return response.data;
+};
+
 export const deleteProject = async (id) => {
   const response = await api.delete(`/projects/${id}`);
   return response.data;
@@ -161,6 +171,17 @@ export const updateCenter = async (id, centerData) => {
 
 export const deleteCenter = async (id) => {
   const response = await api.delete(`/centers/${id}`);
+  return response.data;
+};
+
+// --- Activity Master ---
+export const getActivities = async () => {
+  const response = await api.get('/activities');
+  return response.data;
+};
+
+export const createActivity = async (activityData) => {
+  const response = await api.post('/activities', activityData);
   return response.data;
 };
 

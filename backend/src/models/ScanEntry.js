@@ -39,6 +39,19 @@ const scanEntrySchema = new mongoose.Schema({
   rejectionReason: {
     type: String,
   },
+  rejectedByRole: {
+    type: String,
+  },
+  rejectedFromStatus: {
+    type: String,
+  },
+  lastRejectedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Staff',
+  },
+  lastRejectedAt: {
+    type: Date,
+  },
   approvals: {
     type: Map,
     of: new mongoose.Schema({

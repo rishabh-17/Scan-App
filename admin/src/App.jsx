@@ -12,6 +12,7 @@ import Projects from './pages/Projects';
 import Centers from './pages/Centers';
 import ApprovalDashboard from './pages/ApprovalDashboard';
 import RateCharts from './pages/RateCharts';
+import ActivitiesMaster from './pages/ActivitiesMaster';
 import WorkUpload from './pages/WorkUpload';
 import StaffRegister from './pages/StaffRegister';
 import Layout from './components/Layout';
@@ -84,6 +85,13 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <RateCharts />
+              </Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/activities" element={
+            <ProtectedRoute>
+              <Layout>
+                <ActivitiesMaster />
               </Layout>
             </ProtectedRoute>
           } />

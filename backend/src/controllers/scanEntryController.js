@@ -2,48 +2,13 @@ const ScanEntry = require('../models/ScanEntry');
 const Project = require('../models/Project');
 const Center = require('../models/Center');
 const Staff = require('../models/Staff');
-
-const ACTIVITY_CATALOG = [
-  { name: 'Scanning', code: 'SCAN', aliases: ['Scanning', 'SCAN'] },
-  { name: 'QC', code: 'QC', aliases: ['QC'] },
-  { name: 'Stickering', code: 'Sticker', aliases: ['Stickering', 'Sticker'] },
-  { name: 'Inward', code: 'Inward', aliases: ['Inward'] },
-  { name: 'Outward', code: 'Outward', aliases: ['Outward'] },
-  { name: 'Day Wise', code: 'Day', aliases: ['Day Wise', 'Day', 'DayWise'] },
-  { name: 'Training', code: 'Training', aliases: ['Training'] },
-  { name: 'Referral', code: 'Referral', aliases: ['Referral'] },
-  { name: 'Misc', code: 'Misc', aliases: ['Misc'] },
-  { name: 'Others', code: 'Others', aliases: ['Others'] },
-];
-
-const normalizeActivityText = (value) => {
-  return String(value || '').trim().toLowerCase().replace(/\s+/g, '');
-};
-
-const normalizeActivityType = (value) => {
-  const v = normalizeActivityText(value);
-  if (!v) return null;
-
-  for (const a of ACTIVITY_CATALOG) {
-    for (const alias of a.aliases) {
-      if (normalizeActivityText(alias) === v) return a.code;
-    }
-  }
-
-  return null;
-};
-
-const activityQueryValues = (value) => {
-  const code = normalizeActivityType(value);
-  if (!code) return [String(value)];
-
-  const activity = ACTIVITY_CATALOG.find(a => a.code === code);
-  if (!activity) return [String(value)];
-
-  const values = new Set([activity.code]);
-  for (const alias of activity.aliases) values.add(alias);
-  return Array.from(values);
-};
+const {
+  getActivityCatalog,
+  normalizeActivityType,
+  activityQueryValues,
+  resolveActivityRate,
+  hasConfiguredRate,
+} = require('../utils/activityCatalog');
 
 // ... (createScanEntry and getMyEntries remain same)
 const createScanEntry = async (req, res) => {
@@ -59,24 +24,15 @@ const createScanEntry = async (req, res) => {
       return res.status(404).json({ message: 'Project not found' });
     }
 
-    // Determine rate and amount
-    let rate = project.scanRate;
-    const type = normalizeActivityType(activityType) || 'SCAN';
-
-    if (project.rateChart && project.rateChart.length > 0) {
-      const rateItem = project.rateChart.find(r => r.status === 'active' && normalizeActivityType(r.activityName) === type);
-      if (rateItem) {
-        rate = rateItem.rate;
-      }
-    }
-
-    const amount = scans * rate;
+    const type = await normalizeActivityType(activityType) || 'SCAN';
 
     // Determine centerId from user's assigned center
     let centerId = null;
     if (req.user.center) {
       centerId = req.user.center;
     }
+    const rate = resolveActivityRate(project, type, centerId);
+    const amount = scans * rate;
 
     const scanEntry = await ScanEntry.create({
       operatorId: req.user.id,
@@ -130,6 +86,43 @@ const getApprovableStatuses = (role) => {
     }
   }
   return statuses;
+};
+
+const getManagedProjectIds = async (user) => {
+  if (!user || user.role !== 'project_manager') return [];
+  if (user.project) return [String(user.project)];
+
+  const projects = await Project.find({ managers: user._id }).select('_id').lean();
+  return projects.map((p) => String(p._id));
+};
+
+const getResubmitTargetStatus = (entry, role) => {
+  if (!entry || entry.status !== 'rejected') return null;
+
+  if (entry.rejectedByRole === 'finance_hr') {
+    return role === 'project_manager' ? 'project_approved' : 'entered';
+  }
+
+  if (entry.rejectedByRole === 'project_manager') {
+    return 'entered';
+  }
+
+  return null;
+};
+
+const canResubmitEntry = (entry, user) => {
+  const targetStatus = getResubmitTargetStatus(entry, user?.role);
+  if (!targetStatus) return false;
+
+  if (user.role === 'center_supervisor') {
+    return true;
+  }
+
+  if (user.role === 'project_manager') {
+    return ['project_manager', 'finance_hr'].includes(entry.rejectedByRole);
+  }
+
+  return false;
 };
 
 // Generic approval function (dynamic)
@@ -244,14 +237,107 @@ const rejectEntry = async (req, res) => {
       return res.status(400).json({ message: `Cannot reject entry in status ${entry.status} or unauthorized.` });
     }
 
+    entry.rejectedFromStatus = entry.status;
     entry.status = nextSnapshot.value;
     entry.rejectionReason = reason || 'Rejected by ' + req.user.role;
+    entry.rejectedByRole = req.user.role;
+    entry.lastRejectedBy = req.user.id;
+    entry.lastRejectedAt = Date.now();
 
     entry.auditTrail.push({
       action: 'Rejected',
       by: req.user.id,
       details: `Rejected by ${req.user.name} (${req.user.role}). Reason: ${reason}`,
       date: Date.now()
+    });
+
+    await entry.save();
+    res.json(entry);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+const resubmitEntry = async (req, res) => {
+  try {
+    const entry = await ScanEntry.findById(req.params.id);
+
+    if (!entry) {
+      return res.status(404).json({ message: 'Entry not found' });
+    }
+
+    if (req.user.role === 'center_supervisor') {
+      let allowedCenterIds = [];
+      if (req.user.center) {
+        allowedCenterIds = [String(req.user.center)];
+      } else {
+        const centers = await Center.find({ supervisors: req.user._id }).select('_id').lean();
+        allowedCenterIds = centers.map((c) => String(c._id));
+      }
+
+      if (!entry.centerId || !allowedCenterIds.includes(String(entry.centerId))) {
+        return res.status(403).json({ message: 'Not authorized to resubmit this record' });
+      }
+    } else if (req.user.role === 'project_manager') {
+      const projectIds = await getManagedProjectIds(req.user);
+      if (!projectIds.includes(String(entry.projectId))) {
+        return res.status(403).json({ message: 'Not authorized to resubmit this record' });
+      }
+    } else {
+      return res.status(403).json({ message: 'Only supervisors or project managers can resubmit rejected records' });
+    }
+
+    if (!canResubmitEntry(entry, req.user)) {
+      return res.status(400).json({ message: 'This rejected record cannot be resubmitted by your role' });
+    }
+
+    const { scans, activityType, date } = req.body || {};
+
+    if (scans !== undefined) {
+      const scansNumber = Number(scans);
+      if (!Number.isFinite(scansNumber) || scansNumber <= 0) {
+        return res.status(400).json({ message: 'Invalid scans value' });
+      }
+      entry.scans = scansNumber;
+    }
+
+    const normalizedActivity = activityType !== undefined ? await normalizeActivityType(activityType) : null;
+    if (activityType !== undefined && !normalizedActivity) {
+      return res.status(400).json({ message: 'Invalid activity type' });
+    }
+    if (normalizedActivity) {
+      entry.activityType = normalizedActivity;
+    }
+
+    if (date !== undefined) {
+      const parsedDate = new Date(date);
+      if (Number.isNaN(parsedDate.getTime())) {
+        return res.status(400).json({ message: 'Invalid date' });
+      }
+      entry.date = parsedDate;
+    }
+
+    const project = await Project.findById(entry.projectId).lean();
+    if (!project) {
+      return res.status(400).json({ message: 'Project not found for record' });
+    }
+
+    const rate = resolveActivityRate(project, entry.activityType, entry.centerId);
+    entry.amount = Number(entry.scans) * Number(rate || 0);
+
+    entry.status = getResubmitTargetStatus(entry, req.user.role);
+    entry.rejectionReason = '';
+    entry.rejectedByRole = undefined;
+    entry.rejectedFromStatus = undefined;
+    entry.lastRejectedBy = undefined;
+    entry.lastRejectedAt = undefined;
+
+    entry.auditTrail.push({
+      action: 'Resubmitted',
+      by: req.user.id,
+      details: `Resubmitted by ${req.user.name} (${req.user.role})`,
+      date: Date.now(),
     });
 
     await entry.save();
@@ -293,6 +379,12 @@ const getPendingEntries = async (req, res) => {
         }
 
         query.centerId = allowedCenterIds.length === 1 ? allowedCenterIds[0] : { $in: allowedCenterIds };
+      } else if (req.user.role === 'project_manager') {
+        const projectIds = await getManagedProjectIds(req.user);
+        if (projectIds.length === 0) {
+          return res.json([]);
+        }
+        query.projectId = projectIds.length === 1 ? projectIds[0] : { $in: projectIds };
       }
     } else if (type === 'approved') {
       // Show entries that have been approved by this role
@@ -372,7 +464,7 @@ const getPendingEntries = async (req, res) => {
     }
 
     if (activityType) {
-      query.activityType = { $in: activityQueryValues(activityType) };
+      query.activityType = { $in: await activityQueryValues(activityType, activityCatalog) };
     }
 
     const entries = await ScanEntry.find(query)
@@ -408,6 +500,10 @@ const getPendingEntries = async (req, res) => {
           console.warn(`Snapshot for entry ${entry._id} is invalid or missing .can method`, snapshot);
         }
 
+        if (canResubmitEntry(entry, req.user)) {
+          actions.push('RESUBMIT');
+        }
+
         return { ...entry, actions };
       } catch (err) {
         console.error(`Error processing actions for entry ${entry._id}:`, err.message);
@@ -425,6 +521,7 @@ const getPendingEntries = async (req, res) => {
 // Get Dashboard Stats
 const getStats = async (req, res) => {
   try {
+    const activityCatalog = await getActivityCatalog();
     let query = {};
 
     // RBAC: Scope to user's assigned projects/centers
@@ -579,21 +676,11 @@ const validateBulkUpload = async (req, res) => {
 
     // 4. Validate Activity Type
     if (project) {
-      const normalizedActivity = normalizeActivityType(activityType) || (!activityType ? 'SCAN' : null);
+      const normalizedActivity = await normalizeActivityType(activityType, activityCatalog) || (!activityType ? 'SCAN' : null);
       if (!normalizedActivity) {
-        rowErrors.push(`Activity Type '${activityType}' is invalid. Valid options: ${ACTIVITY_CATALOG.map(a => `${a.name} (${a.code})`).join(', ')}`);
+        rowErrors.push(`Activity Type '${activityType}' is invalid. Valid options: ${activityCatalog.map(a => `${a.name} (${a.code})`).join(', ')}`);
       } else {
-        const validCodes = new Set(['SCAN']);
-        if (project.rateChart && project.rateChart.length > 0) {
-          project.rateChart
-            .filter(r => r.status === 'active')
-            .forEach((r) => {
-              const c = normalizeActivityType(r.activityName);
-              if (c) validCodes.add(c);
-            });
-        }
-
-        if (!validCodes.has(normalizedActivity)) {
+        if (!hasConfiguredRate(project, normalizedActivity, center?._id)) {
           rowErrors.push(`Activity Type '${activityType}' not valid for project '${projectCode}'. Configure an active rate for this activity in the project rate chart.`);
         }
       }
@@ -645,6 +732,7 @@ const bulkCreateScanEntries = async (req, res) => {
     const centerCodes = [...new Set(rows.map(r => r.centerCode))];
     const staffIds = [...new Set(rows.map(r => r.staffId))];
 
+    const activityCatalog = await getActivityCatalog();
     const projects = await Project.find({ projectCode: { $in: projectCodes } });
     const centers = await Center.find({ centerCode: { $in: centerCodes } });
     const staffMembers = await Staff.find({ employeeId: { $in: staffIds } });
@@ -679,12 +767,8 @@ const bulkCreateScanEntries = async (req, res) => {
       }
 
       // Calculate Amount
-      let rate = project.scanRate;
-      const normalizedActivity = normalizeActivityType(activityType) || 'SCAN';
-      if (project.rateChart) {
-        const rateItem = project.rateChart.find(r => r.status === 'active' && normalizeActivityType(r.activityName) === normalizedActivity);
-        if (rateItem) rate = rateItem.rate;
-      }
+      const normalizedActivity = await normalizeActivityType(activityType) || 'SCAN';
+      const rate = resolveActivityRate(project, normalizedActivity, center._id);
 
       entriesToCreate.push({
         operatorId: staff._id,
@@ -749,5 +833,6 @@ module.exports = {
   getStats,
   validateBulkUpload,
   bulkCreateScanEntries,
-  getBulkUploadHistory
+  getBulkUploadHistory,
+  resubmitEntry
 };

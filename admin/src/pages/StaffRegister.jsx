@@ -34,6 +34,8 @@ const StaffRegister = () => {
     email: '',
     aadhaarNumber: '',
     panNumber: '',
+    referenceSource: 'Direct',
+    agencyName: '',
     center: initialCenter,
     project: initialProject,
     password: '',
@@ -192,6 +194,8 @@ const StaffRegister = () => {
         email: formData.email,
         aadhaarNumber: formData.aadhaarNumber,
         panNumber: formData.panNumber,
+        referenceSource: formData.referenceSource,
+        agencyName: formData.referenceSource === 'Agency' ? formData.agencyName : '',
         center: formData.center,
         project: formData.project || undefined,
         password: formData.password,
@@ -212,6 +216,8 @@ const StaffRegister = () => {
         email: '',
         aadhaarNumber: '',
         panNumber: '',
+        referenceSource: 'Direct',
+        agencyName: '',
         password: '',
       }));
     } catch (error) {
@@ -345,6 +351,51 @@ const StaffRegister = () => {
                 />
               </div>
             </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Source *</label>
+              <div className="mt-2 flex items-center gap-6">
+                <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={formData.referenceSource === 'Direct'}
+                    onChange={() => setFormData((prev) => ({
+                      ...prev,
+                      referenceSource: 'Direct',
+                      agencyName: '',
+                    }))}
+                    className="rounded border-gray-300"
+                  />
+                  <span>Direct</span>
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={formData.referenceSource === 'Agency'}
+                    onChange={() => setFormData((prev) => ({
+                      ...prev,
+                      referenceSource: 'Agency',
+                    }))}
+                    className="rounded border-gray-300"
+                  />
+                  <span>Agency</span>
+                </label>
+              </div>
+            </div>
+
+            {formData.referenceSource === 'Agency' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Agency Name *</label>
+                <input
+                  type="text"
+                  name="agencyName"
+                  value={formData.agencyName}
+                  onChange={handleInputChange}
+                  className="w-full mt-1 px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  required
+                />
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700">Password *</label>

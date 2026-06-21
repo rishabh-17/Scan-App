@@ -5,8 +5,13 @@ import Button from '../components/Button';
 import ConfirmModal from '../components/ConfirmModal';
 import AlertModal from '../components/AlertModal';
 import { getCenters, getProjects, importPayroll } from '../services/api';
+import Modal from '../components/Modal';
+import { useAuth } from '../context/useAuth';
 
 const Payroll = () => {
+  const { user } = useAuth();
+  const isFinanceUser = user?.role === 'admin' || user?.role === 'finance_hr';
+  const isProjectManager = user?.role === 'project_manager';
   const [activeTab, setActiveTab] = useState('payouts');
   const [payrollData, setPayrollData] = useState([]);
   const [paymentHistory, setPaymentHistory] = useState([]);
@@ -19,6 +24,18 @@ const Payroll = () => {
   const [projects, setProjects] = useState([]);
   const [selectedCenter, setSelectedCenter] = useState('');
   const [selectedProject, setSelectedProject] = useState('');
+  const [failureModal, setFailureModal] = useState({ isOpen: false, payment: null });
+  const [failureReason, setFailureReason] = useState('');
+  const [editFailureModal, setEditFailureModal] = useState({ isOpen: false, payment: null });
+  const [failedStaffForm, setFailedStaffForm] = useState({
+    name: '',
+    bankDetails: {
+      accountHolderName: '',
+      accountNo: '',
+      ifscCode: '',
+      bankName: '',
+    }
+  });
 
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
@@ -55,12 +72,17 @@ const Payroll = () => {
     const loadInitial = async () => {
       setLoading(true);
       try {
+        const historyPromise = api.get('/payments');
+        const payrollPromise = isFinanceUser ? api.get('/payroll') : Promise.resolve({ data: [] });
         const [payrollResponse, historyResponse] = await Promise.all([
-          api.get('/payroll'),
-          api.get('/payments'),
+          payrollPromise,
+          historyPromise,
         ]);
-        setPayrollData(payrollResponse.data);
-        setPaymentHistory(historyResponse.data);
+        setPayrollData(payrollResponse.data || []);
+        setPaymentHistory(historyResponse.data || []);
+        if (!isFinanceUser) {
+          setActiveTab('history');
+        }
       } catch (error) {
         console.error('Error loading payroll:', error);
       } finally {
@@ -68,11 +90,14 @@ const Payroll = () => {
       }
     };
     loadInitial();
-  }, []);
+  }, [isFinanceUser]);
 
   const handleSearch = async () => {
     setLoading(true);
-    await Promise.all([fetchPayroll(), fetchPaymentHistory()]);
+    await Promise.all([
+      isFinanceUser ? fetchPayroll() : Promise.resolve(),
+      fetchPaymentHistory()
+    ]);
   };
 
   const fetchPayroll = async () => {
@@ -94,6 +119,7 @@ const Payroll = () => {
       const params = {};
       if (selectedCenter) params.center = selectedCenter;
       if (selectedProject) params.project = selectedProject;
+      if (isProjectManager) params.status = 'failed,pending';
       const response = await api.get('/payments', { params });
       setPaymentHistory(response.data);
     } catch (error) {
@@ -225,14 +251,19 @@ const Payroll = () => {
   };
 
   const toggleSelectAllHistory = () => {
-    if (selectedHistoryIds.size === paymentHistory.length) {
+    const selectableIds = paymentHistory
+      .filter((item) => item.status !== 'paid' && item.status !== 'failed')
+      .map((item) => item._id);
+    if (selectedHistoryIds.size === selectableIds.length) {
       setSelectedHistoryIds(new Set());
     } else {
-      setSelectedHistoryIds(new Set(paymentHistory.map(item => item._id)));
+      setSelectedHistoryIds(new Set(selectableIds));
     }
   };
 
   const toggleSelectHistory = (id) => {
+    const payment = paymentHistory.find((item) => item._id === id);
+    if (!payment || payment.status === 'paid' || payment.status === 'failed') return;
     const newSelected = new Set(selectedHistoryIds);
     if (newSelected.has(id)) {
       newSelected.delete(id);
@@ -241,6 +272,8 @@ const Payroll = () => {
     }
     setSelectedHistoryIds(newSelected);
   };
+
+  const canEditFailedRecord = (payment) => payment.status === 'failed' && (isFinanceUser || isProjectManager);
 
   const handleImportClick = () => {
     if (!fileInputRef.current) return;
@@ -472,6 +505,124 @@ const Payroll = () => {
     });
   };
 
+  const openFailureModal = (payment) => {
+    setFailureModal({ isOpen: true, payment });
+    setFailureReason(payment?.failureReason || '');
+  };
+
+  const handleMarkFailed = async () => {
+    if (!failureModal.payment) return;
+    if (!failureReason.trim()) {
+      setAlertModal({
+        isOpen: true,
+        title: 'Validation Error',
+        message: 'Please enter rejection reason',
+        variant: 'danger'
+      });
+      return;
+    }
+
+    setActionLoading(true);
+    try {
+      await api.put(`/payments/${failureModal.payment._id}/fail`, { reason: failureReason });
+      await fetchPaymentHistory();
+      setFailureModal({ isOpen: false, payment: null });
+      setAlertModal({
+        isOpen: true,
+        title: 'Success',
+        message: 'Payment marked as failed',
+        variant: 'success'
+      });
+    } catch (error) {
+      setAlertModal({
+        isOpen: true,
+        title: 'Error',
+        message: error.response?.data?.message || 'Failed to update payment status',
+        variant: 'danger'
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const openEditFailureModal = (payment) => {
+    setEditFailureModal({ isOpen: true, payment });
+    setFailedStaffForm({
+      name: payment?.staff?.name || '',
+      bankDetails: {
+        accountHolderName: payment?.staff?.bankDetails?.accountHolderName || '',
+        accountNo: payment?.staff?.bankDetails?.accountNo || '',
+        ifscCode: payment?.staff?.bankDetails?.ifscCode || '',
+        bankName: payment?.staff?.bankDetails?.bankName || '',
+      }
+    });
+  };
+
+  const handleFailedStaffChange = (e) => {
+    const { name, value } = e.target;
+    if (name.startsWith('bankDetails.')) {
+      const key = name.split('.')[1];
+      setFailedStaffForm((prev) => ({
+        ...prev,
+        bankDetails: {
+          ...prev.bankDetails,
+          [key]: value
+        }
+      }));
+      return;
+    }
+    setFailedStaffForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleFailedStaffSave = async () => {
+    if (!editFailureModal.payment) return;
+
+    setActionLoading(true);
+    try {
+      await api.put(`/payments/${editFailureModal.payment._id}/failure-staff`, failedStaffForm);
+      await fetchPaymentHistory();
+      setEditFailureModal({ isOpen: false, payment: null });
+      setAlertModal({
+        isOpen: true,
+        title: 'Success',
+        message: 'Staff details updated successfully',
+        variant: 'success'
+      });
+    } catch (error) {
+      setAlertModal({
+        isOpen: true,
+        title: 'Error',
+        message: error.response?.data?.message || 'Failed to update staff details',
+        variant: 'danger'
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleResubmitFailedPayment = async (payment) => {
+    setActionLoading(true);
+    try {
+      await api.put(`/payments/${payment._id}/resubmit`);
+      await fetchPaymentHistory();
+      setAlertModal({
+        isOpen: true,
+        title: 'Success',
+        message: 'Failed payment submitted for processing',
+        variant: 'success'
+      });
+    } catch (error) {
+      setAlertModal({
+        isOpen: true,
+        title: 'Error',
+        message: error.response?.data?.message || 'Failed to submit failed payment',
+        variant: 'danger'
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -609,40 +760,46 @@ const Payroll = () => {
             accept=".xlsx,.xls,.csv"
             className="hidden"
           />
-          <Button
-            onClick={handleExport}
-            variant="secondary"
-          >
-            Export to Excel
-          </Button>
-          <Button
-            onClick={handleImportClick}
-            loading={importing}
-          >
-            Import Payments (Excel)
-          </Button>
-          <Button
-            onClick={handlePayrollImportClick}
-            loading={importing}
-            variant="secondary"
-          >
-            Import Payroll (Excel/CSV)
-          </Button>
+          {isFinanceUser && (
+            <>
+              <Button
+                onClick={handleExport}
+                variant="secondary"
+              >
+                Export to Excel
+              </Button>
+              <Button
+                onClick={handleImportClick}
+                loading={importing}
+              >
+                Import Payments (Excel)
+              </Button>
+              <Button
+                onClick={handlePayrollImportClick}
+                loading={importing}
+                variant="secondary"
+              >
+                Import Payroll (Excel/CSV)
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
       {/* Tabs */}
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex space-x-8">
-          <button
-            onClick={() => setActiveTab('payouts')}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'payouts'
-              ? 'border-indigo-500 text-indigo-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-          >
-            Pending Payouts
-          </button>
+          {isFinanceUser && (
+            <button
+              onClick={() => setActiveTab('payouts')}
+              className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'payouts'
+                ? 'border-indigo-500 text-indigo-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+            >
+              Pending Payouts
+            </button>
+          )}
           <button
             onClick={() => setActiveTab('history')}
             className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'history'
@@ -650,7 +807,7 @@ const Payroll = () => {
               : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
           >
-            Payment History
+            {isFinanceUser ? 'Payment History' : 'Payment Failures'}
           </button>
         </nav>
       </div>
@@ -753,14 +910,16 @@ const Payroll = () => {
         <>
           {/* History KPI */}
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
-            <p className="text-sm text-gray-500">Total Paid (All Time)</p>
+            <p className="text-sm text-gray-500">{isFinanceUser ? 'Total Paid (All Time)' : 'Failed / Returned Payments'}</p>
             <h2 className="text-3xl font-bold text-blue-600 mt-1">
-              ₹{calculateTotalPaid().toLocaleString()}
+              {isFinanceUser
+                ? `₹${calculateTotalPaid().toLocaleString()}`
+                : paymentHistory.filter((payment) => payment.status === 'failed').length}
             </h2>
           </div>
 
           {/* Bulk Actions for History */}
-          {selectedHistoryIds.size > 0 && (
+          {isFinanceUser && selectedHistoryIds.size > 0 && (
             <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg flex items-center justify-between mb-6">
               <span className="text-blue-700 font-medium">{selectedHistoryIds.size} payments selected</span>
               <Button
@@ -779,36 +938,43 @@ const Payroll = () => {
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
                     <th className="px-6 py-3 text-left">
-                      <input
-                        type="checkbox"
-                        checked={paymentHistory.length > 0 && selectedHistoryIds.size === paymentHistory.length}
-                        onChange={toggleSelectAllHistory}
-                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                      />
+                      {isFinanceUser && (
+                        <input
+                          type="checkbox"
+                          checked={paymentHistory.filter((p) => p.status !== 'paid' && p.status !== 'failed').length > 0 && selectedHistoryIds.size === paymentHistory.filter((p) => p.status !== 'paid' && p.status !== 'failed').length}
+                          onChange={toggleSelectAllHistory}
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                      )}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Beneficiary</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Amount</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Mode / Ref</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Account Details</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Reason</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {paymentHistory.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="py-12 text-center text-gray-500">No payment history found</td>
+                      <td colSpan="9" className="py-12 text-center text-gray-500">No payment history found</td>
                     </tr>
                   ) : (
                     paymentHistory.map((payment) => (
                       <tr key={payment._id} className={`hover:bg-gray-50 transition ${selectedHistoryIds.has(payment._id) ? 'bg-blue-50' : ''}`}>
                         <td className="px-6 py-4">
-                          <input
-                            type="checkbox"
-                            checked={selectedHistoryIds.has(payment._id)}
-                            onChange={() => toggleSelectHistory(payment._id)}
-                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                          />
+                          {isFinanceUser && (
+                            <input
+                              type="checkbox"
+                              checked={selectedHistoryIds.has(payment._id)}
+                              disabled={payment.status === 'paid' || payment.status === 'failed'}
+                              onChange={() => toggleSelectHistory(payment._id)}
+                              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                          )}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-600">
                           {new Date(payment.paymentDate).toLocaleDateString()}
@@ -834,6 +1000,9 @@ const Payroll = () => {
                             <span className="text-gray-400">-</span>
                           )}
                         </td>
+                        <td className="px-6 py-4 text-sm text-gray-600 max-w-xs">
+                          {payment.failureReason || '-'}
+                        </td>
                         <td className="px-6 py-4">
                           <div className="flex flex-col items-start gap-2">
                             <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${payment.status === 'processed' ? 'bg-blue-50 text-blue-700' :
@@ -843,7 +1012,7 @@ const Payroll = () => {
                               }`}>
                               {payment.status}
                             </span>
-                            {payment.status !== 'paid' && payment.status !== 'failed' && (
+                            {isFinanceUser && payment.status !== 'paid' && payment.status !== 'failed' && (
                               <Button
                                 onClick={() => handleMarkAsPaid(payment._id)}
                                 variant="secondary"
@@ -851,6 +1020,39 @@ const Payroll = () => {
                                 loading={actionLoading}
                               >
                                 Mark Paid
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col items-start gap-2">
+                            {isFinanceUser && payment.status !== 'paid' && payment.status !== 'failed' && (
+                              <Button
+                                onClick={() => openFailureModal(payment)}
+                                variant="danger"
+                                className="text-xs px-2 py-1"
+                                loading={actionLoading}
+                              >
+                                Mark Failed
+                              </Button>
+                            )}
+                            {canEditFailedRecord(payment) && (
+                              <Button
+                                onClick={() => openEditFailureModal(payment)}
+                                variant="secondary"
+                                className="text-xs px-2 py-1"
+                                loading={actionLoading}
+                              >
+                                Edit Staff
+                              </Button>
+                            )}
+                            {(isProjectManager || user?.role === 'admin') && payment.status === 'failed' && (
+                              <Button
+                                onClick={() => handleResubmitFailedPayment(payment)}
+                                className="text-xs px-2 py-1"
+                                loading={actionLoading}
+                              >
+                                Submit For Processing
                               </Button>
                             )}
                           </div>
@@ -882,6 +1084,118 @@ const Payroll = () => {
         message={alertModal.message}
         variant={alertModal.variant}
       />
+
+      <Modal
+        isOpen={failureModal.isOpen}
+        onClose={() => setFailureModal({ isOpen: false, payment: null })}
+        title="Mark Payment As Failed"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Enter the rejection reason for this bank payment failure.
+          </p>
+          <textarea
+            className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+            rows="4"
+            placeholder="Failure reason..."
+            value={failureReason}
+            onChange={(e) => setFailureReason(e.target.value)}
+          />
+          <div className="flex justify-end gap-3 pt-2">
+            <Button
+              variant="secondary"
+              onClick={() => setFailureModal({ isOpen: false, payment: null })}
+              disabled={actionLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleMarkFailed}
+              loading={actionLoading}
+            >
+              Mark Failed
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={editFailureModal.isOpen}
+        onClose={() => setEditFailureModal({ isOpen: false, payment: null })}
+        title="Edit Failed Payment Staff Details"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Only name and bank account details are editable for failed payment correction.
+          </p>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <input
+              type="text"
+              name="name"
+              value={failedStaffForm.name}
+              onChange={handleFailedStaffChange}
+              className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Account Holder Name</label>
+            <input
+              type="text"
+              name="bankDetails.accountHolderName"
+              value={failedStaffForm.bankDetails.accountHolderName}
+              onChange={handleFailedStaffChange}
+              className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Account Number</label>
+            <input
+              type="text"
+              name="bankDetails.accountNo"
+              value={failedStaffForm.bankDetails.accountNo}
+              onChange={handleFailedStaffChange}
+              className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">IFSC Code</label>
+            <input
+              type="text"
+              name="bankDetails.ifscCode"
+              value={failedStaffForm.bankDetails.ifscCode}
+              onChange={handleFailedStaffChange}
+              className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Bank Name</label>
+            <input
+              type="text"
+              name="bankDetails.bankName"
+              value={failedStaffForm.bankDetails.bankName}
+              onChange={handleFailedStaffChange}
+              className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button
+              variant="secondary"
+              onClick={() => setEditFailureModal({ isOpen: false, payment: null })}
+              disabled={actionLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleFailedStaffSave}
+              loading={actionLoading}
+            >
+              Save Details
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

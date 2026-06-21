@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
+import { resubmitEntry } from '../services/api';
 import { Card, Col, Row, Segmented, Space, Statistic, Table, Tag, Typography } from 'antd';
 import { Pie, Column } from '@ant-design/plots';
 import Button from '../components/Button';
@@ -25,6 +26,8 @@ const Dashboard = () => {
   const [alertConfig, setAlertConfig] = useState({ isOpen: false, title: '', message: '' });
   const [rejectModal, setRejectModal] = useState({ isOpen: false, ids: [] });
   const [rejectReason, setRejectReason] = useState('');
+  const [resubmitModal, setResubmitModal] = useState({ isOpen: false, entry: null });
+  const [resubmitForm, setResubmitForm] = useState({ scans: '', activityType: '', date: '' });
 
   const fetchEntries = useCallback(async () => {
     setLoading(true);
@@ -190,7 +193,43 @@ const Dashboard = () => {
     return entry.actions?.includes('REJECT');
   };
 
+  const canResubmit = (entry) => entry.actions?.includes('RESUBMIT');
   const canSelect = (entry) => canApprove(entry) || canReject(entry);
+
+  const openResubmitModal = (entry) => {
+    setResubmitModal({ isOpen: true, entry });
+    setResubmitForm({
+      scans: entry?.scans ?? '',
+      activityType: entry?.activityType ?? '',
+      date: entry?.date ? new Date(entry.date).toISOString().slice(0, 10) : '',
+    });
+  };
+
+  const handleResubmit = async () => {
+    if (!resubmitModal.entry) return;
+
+    setActionLoading(true);
+    try {
+      await resubmitEntry(resubmitModal.entry._id, resubmitForm);
+      setResubmitModal({ isOpen: false, entry: null });
+      await fetchStats();
+      await fetchEntries();
+      setAlertConfig({
+        isOpen: true,
+        title: 'Success',
+        message: 'Record updated and resubmitted successfully',
+        variant: 'success'
+      });
+    } catch (err) {
+      setAlertConfig({
+        isOpen: true,
+        title: 'Resubmission Failed',
+        message: err.response?.data?.message || err.message
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   const statusPieData = [
     { type: 'Pending', value: Number(stats.pendingCount || 0) },
@@ -277,6 +316,15 @@ const Dashboard = () => {
               disabled={processingId !== null}
             >
               Reject
+            </Button>
+          )}
+          {canResubmit(entry) && (
+            <Button
+              onClick={() => openResubmitModal(entry)}
+              variant="primary"
+              disabled={processingId !== null}
+            >
+              Update & Resubmit
             </Button>
           )}
         </Space>
@@ -450,6 +498,69 @@ const Dashboard = () => {
               loading={actionLoading}
             >
               Confirm Reject
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={resubmitModal.isOpen}
+        onClose={() => setResubmitModal({ isOpen: false, entry: null })}
+        title="Update And Resubmit"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+            <input
+              type="date"
+              value={resubmitForm.date}
+              onChange={(e) => setResubmitForm((prev) => ({ ...prev, date: e.target.value }))}
+              className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Activity</label>
+            <select
+              value={resubmitForm.activityType}
+              onChange={(e) => setResubmitForm((prev) => ({ ...prev, activityType: e.target.value }))}
+              className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+            >
+              <option value="SCAN">Scanning</option>
+              <option value="QC">QC</option>
+              <option value="Sticker">Stickering</option>
+              <option value="Inward">Inward</option>
+              <option value="Outward">Outward</option>
+              <option value="Day">Day Wise</option>
+              <option value="Training">Training</option>
+              <option value="Referral">Referral</option>
+              <option value="Misc">Misc</option>
+              <option value="Others">Others</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Units</label>
+            <input
+              type="number"
+              min="1"
+              value={resubmitForm.scans}
+              onChange={(e) => setResubmitForm((prev) => ({ ...prev, scans: e.target.value }))}
+              className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button
+              variant="secondary"
+              onClick={() => setResubmitModal({ isOpen: false, entry: null })}
+              disabled={actionLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleResubmit}
+              loading={actionLoading}
+            >
+              Resubmit
             </Button>
           </div>
         </div>

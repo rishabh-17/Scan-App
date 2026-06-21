@@ -12,6 +12,7 @@ import {
   BarChartOutlined,
   CheckSquareOutlined,
   BankOutlined,
+  AppstoreOutlined,
   LogoutOutlined,
   MoonOutlined,
   SunOutlined,
@@ -57,6 +58,7 @@ const Layout = ({ children }) => {
     if (location.pathname === '/projects') return 'Projects';
     if (location.pathname === '/centers') return 'Centers';
     if (location.pathname === '/rates') return 'Rate Charts';
+    if (location.pathname === '/activities') return 'Activities Master';
     if (location.pathname === '/approvals') return 'Approval Dashboard';
     if (location.pathname === '/upload') return 'Work Upload';
     return 'Admin Panel';
@@ -74,6 +76,7 @@ const Layout = ({ children }) => {
   if (hasRole([])) {
     items.push({ key: '/users', icon: <UserOutlined />, label: 'User Management' });
     items.push({ key: '/centers', icon: <ApartmentOutlined />, label: 'Centers' });
+    items.push({ key: '/activities', icon: <AppstoreOutlined />, label: 'Activities' });
   }
 
   if (hasRole(['project_manager'])) {
@@ -85,7 +88,7 @@ const Layout = ({ children }) => {
     items.push({ key: '/approvals', icon: <CheckSquareOutlined />, label: 'Approvals' });
   }
 
-  if (hasRole(['finance_hr'])) {
+  if (hasRole(['finance_hr', 'project_manager'])) {
     items.push({ key: '/payroll', icon: <BankOutlined />, label: 'Payroll' });
   }
 

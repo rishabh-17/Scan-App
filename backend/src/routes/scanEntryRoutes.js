@@ -9,7 +9,8 @@ const {
     getStats,
     validateBulkUpload,
     bulkCreateScanEntries,
-    getBulkUploadHistory
+    getBulkUploadHistory,
+    resubmitEntry
 } = require('../controllers/scanEntryController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
@@ -24,6 +25,7 @@ router.get('/my-entries', protect, getMyEntries);
 // Generic approval route
 router.put('/:id/approve', protect, approveEntry);
 router.put('/:id/reject', protect, rejectEntry);
+router.put('/:id/resubmit', protect, resubmitEntry);
 
 // Admin Dashboard routes
 router.get('/pending', protect, getPendingEntries);
